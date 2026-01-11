@@ -5,7 +5,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://watchparty-frontend-ochre.vercel.app'),
+  metadataBase: new URL('https://pillow-watch.vercel.app'),
   title: 'Pillow Watch - Cozy Watch Parties',
   description: 'Get cozy and watch videos together with friends. Your virtual living room for movie nights.',
   icons: {
