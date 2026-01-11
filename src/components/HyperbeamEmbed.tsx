@@ -72,16 +72,14 @@ export default function HyperbeamEmbed({
   useEffect(() => {
     if (!embedUrl || !containerRef.current) return;
 
-    // Prevent re-initialization if we already have an instance with the same URL
-    if (initializedUrlRef.current === embedUrl && hbInstanceRef.current) {
-      console.log('[HyperbeamEmbed] Instance already exists for this URL, skipping re-init');
+    // Prevent re-initialization if we already have an instance with the same base URL
+    // (ignore token differences - same session can have different tokens for host/viewer)
+    const baseUrl = embedUrl.split('?')[0];
+    const existingBaseUrl = initializedUrlRef.current?.split('?')[0];
+    
+    if (existingBaseUrl === baseUrl && hbInstanceRef.current) {
+      console.log('[HyperbeamEmbed] Instance already exists for this session, skipping re-init');
       setIsLoading(false);
-      return;
-    }
-
-    // Prevent concurrent initialization attempts (StrictMode protection)
-    if (isInitializingRef.current) {
-      console.log('[HyperbeamEmbed] Already initializing, skipping');
       return;
     }
 
@@ -97,10 +95,20 @@ export default function HyperbeamEmbed({
       initializedUrlRef.current = null;
     }
 
+    // Reset initializing flag if we're starting fresh
+    isInitializingRef.current = false;
+
     let isMounted = true;
-    isInitializingRef.current = true;
     
     const initHyperbeam = async () => {
+      // Prevent concurrent initialization
+      if (isInitializingRef.current) {
+        console.log('[HyperbeamEmbed] Already initializing, skipping');
+        return;
+      }
+      
+      isInitializingRef.current = true;
+      
       try {
         console.log('[HyperbeamEmbed] Initializing with URL:', embedUrl);
         console.log('[HyperbeamEmbed] isHost:', isHost);
