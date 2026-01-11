@@ -24,7 +24,20 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/logo.png" type="image/png" />
       </head>
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        {children}
+        <footer className="fixed bottom-2 left-0 right-0 text-center text-xs text-gray-500 font-mono z-50 pointer-events-none">
+          built by{' '}
+          <a 
+            href="https://linkedin.com/in/whereishassan" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-white transition-colors pointer-events-auto"
+          >
+            @whereishassan
+          </a>
+        </footer>
+      </body>
     </html>
   );
 }
