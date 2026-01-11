@@ -220,7 +220,7 @@ export default function VoiceCall({ socket, currentUserId, currentUserName }: Vo
     socket.on('voice:offer', async ({ fromId, sdp }) => {
       console.log('[Voice] Received offer from', fromId);
       
-      let pc = peerConnectionsRef.current.get(fromId);
+      let pc: RTCPeerConnection | null | undefined = peerConnectionsRef.current.get(fromId);
       if (!pc) {
         pc = createPeerConnection(fromId, false);
       }
