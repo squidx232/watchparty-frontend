@@ -34,7 +34,6 @@ export default function RoomPage() {
   const [hyperbeamEmbedUrl, setHyperbeamEmbedUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const prevMessagesLengthRef = useRef(0);
 
   // Get username from URL or localStorage
@@ -174,67 +173,19 @@ export default function RoomPage() {
     };
   }, []);
 
-  // Track if audio has been unlocked (Safari/iOS requirement)
-  const audioUnlockedRef = useRef(false);
-
-  // Initialize audio element for message notifications
-  useEffect(() => {
-    audioRef.current = new Audio('/message.mp3');
-    audioRef.current.volume = 0.5;
-    // Preload the audio
-    audioRef.current.load();
-    
-    return () => {
-      audioRef.current = null;
-    };
-  }, []);
-
-  // Unlock audio on user interaction (Safari/iOS requires this)
-  useEffect(() => {
-    const unlockAudio = async () => {
-      if (audioUnlockedRef.current || !audioRef.current) return;
-      
-      try {
-        // Create a short silent play to unlock
-        audioRef.current.muted = true;
-        await audioRef.current.play();
-        audioRef.current.pause();
-        audioRef.current.muted = false;
-        audioRef.current.currentTime = 0;
-        audioUnlockedRef.current = true;
-        console.log('Audio unlocked successfully');
-      } catch (err) {
-        // Will retry on next interaction
-      }
-    };
-
-    // Listen for any user interaction
-    const events = ['touchstart', 'touchend', 'click', 'keydown'];
-    events.forEach(event => {
-      document.addEventListener(event, unlockAudio, { passive: true });
-    });
-
-    return () => {
-      events.forEach(event => {
-        document.removeEventListener(event, unlockAudio);
-      });
-    };
-  }, []);
-
   // Play sound for new messages (centralized - works whether chat is open or closed)
+  // Using a simple approach that works on Safari/iOS
   useEffect(() => {
     if (messages.length > prevMessagesLengthRef.current) {
       const lastMessage = messages[messages.length - 1];
       // Only play sound if the message is from someone else
       if (lastMessage && lastMessage.senderId !== currentParticipant?.id) {
-        if (audioRef.current) {
-          // Clone the audio to allow overlapping sounds and avoid Safari issues
-          const sound = audioRef.current.cloneNode() as HTMLAudioElement;
-          sound.volume = 0.5;
-          sound.play().catch(err => {
-            console.log('Could not play notification sound:', err.message);
-          });
-        }
+        // Create fresh audio element each time for Safari compatibility
+        const audio = new Audio('/message.mp3');
+        audio.volume = 0.5;
+        audio.play().catch(() => {
+          // Silently fail - autoplay may be blocked
+        });
       }
     }
     prevMessagesLengthRef.current = messages.length;

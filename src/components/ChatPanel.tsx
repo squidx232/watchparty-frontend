@@ -95,7 +95,7 @@ export default function ChatPanel({
   return (
     <div className={`flex flex-col glass-heavy overflow-hidden ${
       isFullscreenMode 
-        ? 'w-full h-full rounded-none bg-background-primary/95 backdrop-blur-xl' 
+        ? 'w-full h-full max-h-full rounded-none bg-background-primary/95 backdrop-blur-xl' 
         : 'w-80 lg:w-96 h-full flex-shrink-0 rounded-2xl animate-slide-in-right'
     }`}>
       {/* Header */}
@@ -202,7 +202,13 @@ export default function ChatPanel({
       )}
 
       {/* Input Area */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-glass-border">
+      <form 
+        onSubmit={handleSubmit} 
+        className="p-4 border-t border-glass-border flex-shrink-0"
+        style={isFullscreenMode ? {
+          paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
+        } : undefined}
+      >
         <div className="flex items-center gap-2">
           {/* Emoji Toggle */}
           <button
