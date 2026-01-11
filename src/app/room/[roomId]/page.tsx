@@ -72,10 +72,14 @@ export default function RoomPage() {
     onError: (err) => console.error('Room error:', err),
   });
 
+  // Track if we've already initialized the cloud browser
+  const [hasInitializedHyperbeam, setHasInitializedHyperbeam] = useState(false);
+
   // Check cloud browser availability and auto-start session when joined
-  // We need to wait for currentParticipant to be set to know the actual role
+  // Only run ONCE when first joined - don't re-run when role changes
   useEffect(() => {
     if (!isJoined || !currentParticipant) return;
+    if (hasInitializedHyperbeam) return; // Already initialized, don't re-run
     
     const actualIsHost = currentParticipant.role === 'host';
     console.log('[Room] Initializing cloud browser, isHost:', actualIsHost);
@@ -93,14 +97,16 @@ export default function RoomPage() {
           if (existingSession) {
             console.log('[Room] Using existing session URL:', existingSession.embedUrl);
             setHyperbeamEmbedUrl(existingSession.embedUrl);
+            setHasInitializedHyperbeam(true);
           } else if (actualIsHost) {
             // Host auto-starts the session
             console.log('[Room] Host creating new session');
             const result = await createCloudBrowserSession(roomId, actualIsHost);
             console.log('[Room] Created session URL:', result.embedUrl);
             setHyperbeamEmbedUrl(result.embedUrl);
+            setHasInitializedHyperbeam(true);
           } else {
-            // Viewer - session doesn't exist yet, wait for roomInfo update
+            // Viewer - session doesn't exist yet, polling will handle it
             console.log('[Room] Viewer waiting for session to be created by host');
           }
         }
@@ -111,12 +117,13 @@ export default function RoomPage() {
     };
     
     initCloudBrowser();
-  }, [isJoined, roomId, currentParticipant]);
+  }, [isJoined, roomId, currentParticipant, hasInitializedHyperbeam]);
 
   // Poll for session if viewer doesn't have embed URL yet
   // Always use getCloudBrowserSession API to get the correct URL with proper permissions
   useEffect(() => {
     if (hyperbeamEmbedUrl) return; // Already have URL
+    if (hasInitializedHyperbeam) return; // Already initialized
     if (!isJoined || !currentParticipant) return;
     
     const actualIsHost = currentParticipant.role === 'host';
@@ -131,6 +138,7 @@ export default function RoomPage() {
           if (session) {
             console.log('[Room] Viewer got session URL:', session.embedUrl);
             setHyperbeamEmbedUrl(session.embedUrl);
+            setHasInitializedHyperbeam(true);
             clearInterval(pollInterval);
           }
         } catch (error) {
@@ -140,7 +148,7 @@ export default function RoomPage() {
       
       return () => clearInterval(pollInterval);
     }
-  }, [hyperbeamEmbedUrl, roomId, isJoined, currentParticipant, hyperbeamAvailable]);
+  }, [hyperbeamEmbedUrl, roomId, isJoined, currentParticipant, hyperbeamAvailable, hasInitializedHyperbeam]);
 
   // Listen for fullscreen changes (including ESC key exit)
   useEffect(() => {
