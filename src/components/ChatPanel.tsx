@@ -92,12 +92,80 @@ export default function ChatPanel({
     return groups;
   }, [] as { senderId: string; senderName: string; messages: ChatMessage[] }[]);
 
+  // For fullscreen mode, only show last 5 messages
+  const displayMessages = isFullscreenMode ? messages.slice(-5) : messages;
+  
+  // Recompute grouped messages for display
+  const displayGroupedMessages = displayMessages.reduce((groups, message, index) => {
+    const prevMessage = displayMessages[index - 1];
+    const isSameSender = prevMessage?.senderId === message.senderId;
+    const isWithinTime = prevMessage && 
+      (new Date(message.timestamp).getTime() - new Date(prevMessage.timestamp).getTime()) < 60000;
+    
+    if (isSameSender && isWithinTime) {
+      groups[groups.length - 1].messages.push(message);
+    } else {
+      groups.push({
+        senderId: message.senderId,
+        senderName: message.senderName,
+        messages: [message],
+      });
+    }
+    return groups;
+  }, [] as { senderId: string; senderName: string; messages: ChatMessage[] }[]);
+
+  // Use different layouts for fullscreen vs normal mode
+  if (isFullscreenMode) {
+    return (
+      <div className="w-full h-full flex flex-col justify-end p-2">
+        {/* Compact chat box */}
+        <div className="bg-black/80 backdrop-blur-md rounded-xl overflow-hidden max-w-full">
+          {/* Messages - compact */}
+          <div className="max-h-[150px] overflow-y-auto p-2 space-y-1">
+            {displayGroupedMessages.map((group, groupIndex) => (
+              <div key={groupIndex} className="flex items-start gap-2">
+                <span 
+                  className="text-xs font-semibold flex-shrink-0"
+                  style={{ color: getParticipantColor(group.senderId) }}
+                >
+                  {group.senderName}:
+                </span>
+                <span className="text-xs text-white break-words">
+                  {group.messages.map(m => m.content).join(' ')}
+                </span>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+          
+          {/* Compact input */}
+          <form onSubmit={handleSubmit} className="p-2 border-t border-white/10">
+            <div className="flex items-center gap-2">
+              <input
+                ref={inputRef}
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Message..."
+                maxLength={500}
+                className="flex-1 bg-white/10 text-white text-xs px-3 py-2 rounded-lg outline-none placeholder-white/50"
+              />
+              <button
+                type="submit"
+                disabled={!input.trim()}
+                className={`p-2 rounded-lg ${input.trim() ? 'bg-accent-primary text-white' : 'bg-white/10 text-white/50'}`}
+              >
+                <Send className="w-3 h-3" />
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`flex flex-col glass-heavy overflow-hidden ${
-      isFullscreenMode 
-        ? 'w-full h-full max-h-full rounded-none bg-background-primary/95 backdrop-blur-xl' 
-        : 'w-80 lg:w-96 h-full flex-shrink-0 rounded-2xl animate-slide-in-right'
-    }`}>
+    <div className="w-80 lg:w-96 h-full flex-shrink-0 flex flex-col glass-heavy rounded-2xl overflow-hidden animate-slide-in-right">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-glass-border">
         <div className="flex items-center gap-3">

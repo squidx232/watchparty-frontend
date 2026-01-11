@@ -173,19 +173,66 @@ export default function RoomPage() {
     };
   }, []);
 
-  // Play sound for new messages (centralized - works whether chat is open or closed)
-  // Using a simple approach that works on Safari/iOS
+  // Audio context for iOS/Safari support
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
+
+  // Initialize audio context on first user interaction (required for iOS)
+  useEffect(() => {
+    const initAudio = async () => {
+      if (audioContextRef.current) return;
+      
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        audioContextRef.current = new AudioContextClass();
+        
+        // Load and decode the audio file
+        const response = await fetch('/message.mp3');
+        const arrayBuffer = await response.arrayBuffer();
+        audioBufferRef.current = await audioContextRef.current.decodeAudioData(arrayBuffer);
+      } catch (err) {
+        console.log('Audio init failed:', err);
+      }
+    };
+
+    // Initialize on user interaction
+    const handleInteraction = () => {
+      initAudio();
+      // Resume audio context if suspended (iOS requirement)
+      if (audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+    };
+
+    document.addEventListener('touchstart', handleInteraction, { passive: true });
+    document.addEventListener('click', handleInteraction, { passive: true });
+
+    return () => {
+      document.removeEventListener('touchstart', handleInteraction);
+      document.removeEventListener('click', handleInteraction);
+    };
+  }, []);
+
+  // Play sound for new messages
   useEffect(() => {
     if (messages.length > prevMessagesLengthRef.current) {
       const lastMessage = messages[messages.length - 1];
       // Only play sound if the message is from someone else
       if (lastMessage && lastMessage.senderId !== currentParticipant?.id) {
-        // Create fresh audio element each time for Safari compatibility
-        const audio = new Audio('/message.mp3');
-        audio.volume = 0.5;
-        audio.play().catch(() => {
-          // Silently fail - autoplay may be blocked
-        });
+        // Play using Web Audio API
+        if (audioContextRef.current && audioBufferRef.current) {
+          try {
+            const source = audioContextRef.current.createBufferSource();
+            const gainNode = audioContextRef.current.createGain();
+            gainNode.gain.value = 0.5;
+            source.buffer = audioBufferRef.current;
+            source.connect(gainNode);
+            gainNode.connect(audioContextRef.current.destination);
+            source.start(0);
+          } catch (err) {
+            console.log('Sound play failed:', err);
+          }
+        }
       }
     }
     prevMessagesLengthRef.current = messages.length;
