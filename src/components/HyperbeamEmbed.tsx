@@ -113,16 +113,24 @@ export default function HyperbeamEmbed({
         console.log('[HyperbeamEmbed] Initializing with URL:', embedUrl);
         console.log('[HyperbeamEmbed] isHost:', isHost);
 
+        // Small delay for viewers to let host connect first
+        if (!isHost) {
+          console.log('[HyperbeamEmbed] Viewer waiting 1s before connecting...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
         // Clear the container first
         if (containerRef.current) {
           containerRef.current.innerHTML = '';
         }
 
         // Create new Hyperbeam instance using the SDK
-        // Timeout set to 60 seconds for slow connections
+        // Timeout set to 120 seconds for slow connections
+        console.log('[HyperbeamEmbed] Calling Hyperbeam SDK...');
         const hb = await Hyperbeam(containerRef.current!, embedUrl, {
-          timeout: 60000,
+          timeout: 120000,
         });
+        console.log('[HyperbeamEmbed] Hyperbeam SDK returned:', hb);
         
         if (!isMounted) {
           console.log('[HyperbeamEmbed] Component unmounted during init, destroying');
