@@ -20,7 +20,7 @@ import MediaControls from '@/components/MediaControls';
 import RoomHeader from '@/components/RoomHeader';
 import LoadingScreen from '@/components/LoadingScreen';
 import ErrorScreen from '@/components/ErrorScreen';
-import { createCloudBrowserSession, terminateCloudBrowserSession, getHyperbeamStatus, getCloudBrowserSession } from '@/lib/api';
+import { createCloudBrowserSessionWithRetry, terminateCloudBrowserSession, getHyperbeamStatus, getCloudBrowserSession, RateLimitError } from '@/lib/api';
 
 export default function RoomPage() {
   const params = useParams();
@@ -35,6 +35,13 @@ export default function RoomPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
   const prevMessagesLengthRef = useRef(0);
+  
+  // Rate limit handling state
+  const [rateLimitCountdown, setRateLimitCountdown] = useState<number>(0);
+  const [hyperbeamError, setHyperbeamError] = useState<string | null>(null);
+  
+  // LAYER 3: Use ref to prevent duplicate initialization during reconnects
+  const initializingRef = useRef(false);
 
   // Get username from URL or localStorage
   useEffect(() => {
@@ -75,19 +82,45 @@ export default function RoomPage() {
     onError: (err) => console.error('Room error:', err),
   });
 
-  // Track if we've already initialized the cloud browser
-  const [hasInitializedHyperbeam, setHasInitializedHyperbeam] = useState(false);
+  // LAYER 3: Track initialization in sessionStorage to persist across page refreshes
+  const [hasInitializedHyperbeam, setHasInitializedHyperbeam] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem(`hyperbeam_init_${roomId}`) === 'true';
+  });
+
+  // Persist initialization state to sessionStorage
+  useEffect(() => {
+    if (hasInitializedHyperbeam) {
+      sessionStorage.setItem(`hyperbeam_init_${roomId}`, 'true');
+    }
+  }, [hasInitializedHyperbeam, roomId]);
+
+  // Clear initialization state when leaving room (cleanup)
+  useEffect(() => {
+    return () => {
+      // Don't clear on normal unmount - only when explicitly leaving
+    };
+  }, [roomId]);
 
   // Check cloud browser availability and auto-start session when joined
-  // Only run ONCE when first joined - don't re-run when role changes
+  // LAYER 3: Prevents duplicate initialization using ref + sessionStorage
   useEffect(() => {
     if (!isJoined || !currentParticipant) return;
     if (hasInitializedHyperbeam) return; // Already initialized, don't re-run
+    if (initializingRef.current) return; // Already in progress, prevent race condition
     
     const actualIsHost = currentParticipant.role === 'host';
     console.log('[Room] Initializing cloud browser, isHost:', actualIsHost);
     
     const initCloudBrowser = async () => {
+      // LAYER 3: Prevent concurrent initialization attempts
+      if (initializingRef.current) {
+        console.log('[Room] Initialization already in progress, skipping');
+        return;
+      }
+      initializingRef.current = true;
+      setHyperbeamError(null);
+      
       try {
         const { available } = await getHyperbeamStatus();
         console.log('[Room] Hyperbeam available:', available);
@@ -102,20 +135,41 @@ export default function RoomPage() {
             setHyperbeamEmbedUrl(existingSession.embedUrl);
             setHasInitializedHyperbeam(true);
           } else if (actualIsHost) {
-            // Host auto-starts the session
-            console.log('[Room] Host creating new session');
-            const result = await createCloudBrowserSession(roomId, actualIsHost);
+            // Host auto-starts the session with retry logic
+            console.log('[Room] Host creating new session (with retry support)');
+            
+            // LAYER 2: Use retry function with countdown callback
+            const result = await createCloudBrowserSessionWithRetry(
+              roomId,
+              actualIsHost,
+              undefined, // startUrl
+              (secondsRemaining) => {
+                setRateLimitCountdown(secondsRemaining);
+              },
+              3 // maxRetries
+            );
+            
             console.log('[Room] Created session URL:', result.embedUrl);
             setHyperbeamEmbedUrl(result.embedUrl);
             setHasInitializedHyperbeam(true);
+            setRateLimitCountdown(0);
           } else {
             // Viewer - session doesn't exist yet, polling will handle it
             console.log('[Room] Viewer waiting for session to be created by host');
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to initialize cloud browser:', error);
+        
+        // LAYER 2: Handle rate limit errors gracefully
+        if (error.isRateLimited || error.name === 'RateLimitError') {
+          setHyperbeamError(`Rate limited. Retried ${3} times but still limited. Please wait and try again.`);
+        } else {
+          setHyperbeamError(error.message || 'Failed to initialize cloud browser');
+        }
         setHyperbeamAvailable(false);
+      } finally {
+        initializingRef.current = false;
       }
     };
     
@@ -243,13 +297,29 @@ export default function RoomPage() {
   // Calculate unread message count
   const unreadCount = showChat ? 0 : Math.max(0, messages.length - lastSeenMessageCount);
 
-  // Handle starting cloud browser session
+  // Handle starting cloud browser session (with retry logic)
   const handleStartCloudBrowser = useCallback(async (startUrl?: string) => {
     try {
-      const result = await createCloudBrowserSession(roomId, isHost, startUrl);
+      setHyperbeamError(null);
+      const result = await createCloudBrowserSessionWithRetry(
+        roomId,
+        isHost,
+        startUrl,
+        (secondsRemaining) => {
+          setRateLimitCountdown(secondsRemaining);
+        },
+        3 // maxRetries
+      );
       setHyperbeamEmbedUrl(result.embedUrl);
-    } catch (error) {
+      setHasInitializedHyperbeam(true);
+      setRateLimitCountdown(0);
+    } catch (error: any) {
       console.error('Failed to start cloud browser:', error);
+      if (error.isRateLimited || error.name === 'RateLimitError') {
+        setHyperbeamError('Rate limited. Please wait a moment and try again.');
+      } else {
+        setHyperbeamError(error.message || 'Failed to start cloud browser');
+      }
       throw error;
     }
   }, [roomId, isHost]);
@@ -336,19 +406,80 @@ export default function RoomPage() {
                 onToggleChat={() => setShowChat(!showChat)}
                 unreadCount={unreadCount}
               />
-            ) : isHyperbeamLoading ? (
+            ) : isHyperbeamLoading || rateLimitCountdown > 0 ? (
               <div className="w-full h-full rounded-2xl bg-background-secondary flex items-center justify-center">
                 <div className="text-center">
                   <div className="relative w-20 h-20 mb-6 mx-auto">
-                    <div className="absolute inset-0 rounded-2xl border-2 border-status-success/30 animate-ping" style={{ animationDuration: '2s' }} />
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-status-success to-emerald-500 flex items-center justify-center">
+                    {rateLimitCountdown > 0 ? (
+                      // Rate limit countdown UI
+                      <>
+                        <div className="absolute inset-0 rounded-2xl border-2 border-amber-500/30 animate-pulse" />
+                        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+                          <span className="text-2xl font-bold text-white">{rateLimitCountdown}</span>
+                        </div>
+                      </>
+                    ) : (
+                      // Normal loading UI
+                      <>
+                        <div className="absolute inset-0 rounded-2xl border-2 border-status-success/30 animate-ping" style={{ animationDuration: '2s' }} />
+                        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-status-success to-emerald-500 flex items-center justify-center">
+                          <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {rateLimitCountdown > 0 ? (
+                    <>
+                      <p className="text-amber-400 font-medium mb-2">Rate limited - retrying in {rateLimitCountdown}s</p>
+                      <p className="text-text-muted text-sm">Too many requests, waiting for cooldown...</p>
+                    </>
+                  ) : hyperbeamError ? (
+                    <>
+                      <p className="text-red-400 font-medium mb-2">Failed to start cloud browser</p>
+                      <p className="text-text-muted text-sm">{hyperbeamError}</p>
+                      <button 
+                        onClick={() => {
+                          setHyperbeamError(null);
+                          setHasInitializedHyperbeam(false);
+                          sessionStorage.removeItem(`hyperbeam_init_${roomId}`);
+                        }}
+                        className="mt-4 px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 rounded-lg text-white text-sm transition-colors"
+                      >
+                        Retry
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-text-secondary font-medium mb-2">Loading cloud browser...</p>
+                      <p className="text-text-muted text-sm">Waiting for session</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : hyperbeamError && !hyperbeamEmbedUrl ? (
+              <div className="w-full h-full rounded-2xl bg-background-secondary flex items-center justify-center">
+                <div className="text-center">
+                  <div className="relative w-20 h-20 mb-6 mx-auto">
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-red-500 to-rose-500 flex items-center justify-center">
                       <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
                     </div>
                   </div>
-                  <p className="text-text-secondary font-medium mb-2">Loading cloud browser...</p>
-                  <p className="text-text-muted text-sm">Waiting for session</p>
+                  <p className="text-red-400 font-medium mb-2">Cloud browser error</p>
+                  <p className="text-text-muted text-sm mb-4">{hyperbeamError}</p>
+                  <button 
+                    onClick={() => {
+                      setHyperbeamError(null);
+                      setHasInitializedHyperbeam(false);
+                      sessionStorage.removeItem(`hyperbeam_init_${roomId}`);
+                    }}
+                    className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 rounded-lg text-white text-sm transition-colors"
+                  >
+                    Retry
+                  </button>
                 </div>
               </div>
             ) : (

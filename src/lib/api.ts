@@ -78,13 +78,30 @@ export async function getHyperbeamStatus(): Promise<{ available: boolean }> {
 }
 
 /**
+ * Rate limit error with retry information
+ */
+export class RateLimitError extends Error {
+  public retryAfterMs: number;
+  public retryAfterSeconds: number;
+  public isRateLimited: boolean = true;
+
+  constructor(message: string, retryAfterMs: number) {
+    super(message);
+    this.name = 'RateLimitError';
+    this.retryAfterMs = retryAfterMs;
+    this.retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
+  }
+}
+
+/**
  * Create or get a cloud browser session for a room
+ * Throws RateLimitError if rate limited (429), allowing caller to handle retry
  */
 export async function createCloudBrowserSession(
   roomId: string,
   isHost: boolean,
   startUrl?: string
-): Promise<{ success: boolean; embedUrl: string; sessionId: string }> {
+): Promise<{ success: boolean; embedUrl: string; sessionId: string; reused?: boolean; recovered?: boolean }> {
   const response = await fetch(`${API_URL}/api/rooms/${roomId}/hyperbeam`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -93,10 +110,62 @@ export async function createCloudBrowserSession(
 
   if (!response.ok) {
     const error = await response.json();
+    
+    // Handle rate limiting specifically
+    if (response.status === 429 && error.isRateLimited) {
+      const retryAfterMs = error.retryAfterMs || 60000;
+      throw new RateLimitError(
+        error.message || `Rate limited. Please wait ${Math.ceil(retryAfterMs / 1000)} seconds.`,
+        retryAfterMs
+      );
+    }
+    
     throw new Error(error.error || 'Failed to create cloud browser session');
   }
 
   return response.json();
+}
+
+/**
+ * Create cloud browser session with automatic retry on rate limit
+ * Shows countdown and retries automatically
+ */
+export async function createCloudBrowserSessionWithRetry(
+  roomId: string,
+  isHost: boolean,
+  startUrl?: string,
+  onRateLimitCountdown?: (secondsRemaining: number) => void,
+  maxRetries: number = 3
+): Promise<{ success: boolean; embedUrl: string; sessionId: string; reused?: boolean; recovered?: boolean }> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await createCloudBrowserSession(roomId, isHost, startUrl);
+    } catch (error) {
+      if (error instanceof RateLimitError) {
+        lastError = error;
+        console.log(`[API] Rate limited, waiting ${error.retryAfterSeconds}s before retry (attempt ${attempt + 1}/${maxRetries})`);
+        
+        // Countdown with callback
+        let remaining = error.retryAfterSeconds;
+        while (remaining > 0) {
+          onRateLimitCountdown?.(remaining);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          remaining--;
+        }
+        onRateLimitCountdown?.(0);
+        
+        // Add small buffer before retry
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } else {
+        // Non-rate-limit error, throw immediately
+        throw error;
+      }
+    }
+  }
+  
+  throw lastError || new Error('Failed to create cloud browser session after retries');
 }
 
 /**
