@@ -125,11 +125,19 @@ export default function HyperbeamEmbed({
         }
 
         // Create new Hyperbeam instance using the SDK
-        // Timeout set to 120 seconds for slow connections
+        // Timeout set to 60 seconds for connections
         console.log('[HyperbeamEmbed] Calling Hyperbeam SDK...');
-        const hb = await Hyperbeam(containerRef.current!, embedUrl, {
-          timeout: 120000,
+        
+        // Wrap in our own timeout to catch hangs
+        const hbPromise = Hyperbeam(containerRef.current!, embedUrl, {
+          timeout: 60000,
         });
+        
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Hyperbeam connection timed out after 60s')), 65000);
+        });
+        
+        const hb = await Promise.race([hbPromise, timeoutPromise]);
         console.log('[HyperbeamEmbed] Hyperbeam SDK returned:', hb);
         
         if (!isMounted) {
