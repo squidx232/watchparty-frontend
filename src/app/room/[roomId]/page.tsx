@@ -173,43 +173,46 @@ export default function RoomPage() {
     };
   }, []);
 
-  // Audio context for iOS/Safari support
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioBufferRef = useRef<AudioBuffer | null>(null);
+  // Sound notification - using preloaded audio element
+  const notificationSoundRef = useRef<HTMLAudioElement | null>(null);
+  const soundEnabledRef = useRef(false);
 
-  // Initialize audio context on first user interaction (required for iOS)
+  // Create audio element and enable on user interaction
   useEffect(() => {
-    const initAudio = async () => {
-      if (audioContextRef.current) return;
+    // Create audio element
+    const audio = new Audio('/message.mp3');
+    audio.preload = 'auto';
+    audio.volume = 0.5;
+    notificationSoundRef.current = audio;
+
+    // Enable sound on first user interaction (iOS requirement)
+    const enableSound = () => {
+      if (soundEnabledRef.current) return;
       
-      try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        audioContextRef.current = new AudioContextClass();
-        
-        // Load and decode the audio file
-        const response = await fetch('/message.mp3');
-        const arrayBuffer = await response.arrayBuffer();
-        audioBufferRef.current = await audioContextRef.current.decodeAudioData(arrayBuffer);
-      } catch (err) {
-        console.log('Audio init failed:', err);
+      // Play silent/muted to unlock audio
+      const unlockAudio = notificationSoundRef.current;
+      if (unlockAudio) {
+        unlockAudio.muted = true;
+        unlockAudio.play().then(() => {
+          unlockAudio.pause();
+          unlockAudio.currentTime = 0;
+          unlockAudio.muted = false;
+          soundEnabledRef.current = true;
+          console.log('[Audio] Sound enabled');
+        }).catch(() => {});
       }
     };
 
-    // Initialize on user interaction
-    const handleInteraction = () => {
-      initAudio();
-      // Resume audio context if suspended (iOS requirement)
-      if (audioContextRef.current?.state === 'suspended') {
-        audioContextRef.current.resume();
-      }
-    };
-
-    document.addEventListener('touchstart', handleInteraction, { passive: true });
-    document.addEventListener('click', handleInteraction, { passive: true });
+    // Listen on multiple events
+    window.addEventListener('touchstart', enableSound, { once: true, passive: true });
+    window.addEventListener('click', enableSound, { once: true, passive: true });
+    window.addEventListener('keydown', enableSound, { once: true, passive: true });
 
     return () => {
-      document.removeEventListener('touchstart', handleInteraction);
-      document.removeEventListener('click', handleInteraction);
+      window.removeEventListener('touchstart', enableSound);
+      window.removeEventListener('click', enableSound);
+      window.removeEventListener('keydown', enableSound);
+      notificationSoundRef.current = null;
     };
   }, []);
 
@@ -219,19 +222,10 @@ export default function RoomPage() {
       const lastMessage = messages[messages.length - 1];
       // Only play sound if the message is from someone else
       if (lastMessage && lastMessage.senderId !== currentParticipant?.id) {
-        // Play using Web Audio API
-        if (audioContextRef.current && audioBufferRef.current) {
-          try {
-            const source = audioContextRef.current.createBufferSource();
-            const gainNode = audioContextRef.current.createGain();
-            gainNode.gain.value = 0.5;
-            source.buffer = audioBufferRef.current;
-            source.connect(gainNode);
-            gainNode.connect(audioContextRef.current.destination);
-            source.start(0);
-          } catch (err) {
-            console.log('Sound play failed:', err);
-          }
+        const audio = notificationSoundRef.current;
+        if (audio && soundEnabledRef.current) {
+          audio.currentTime = 0;
+          audio.play().catch(() => {});
         }
       }
     }

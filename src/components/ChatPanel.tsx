@@ -117,12 +117,13 @@ export default function ChatPanel({
   // Use different layouts for fullscreen vs normal mode
   if (isFullscreenMode) {
     return (
-      <div className="w-full h-full flex flex-col justify-end p-2">
-        {/* Compact chat box */}
-        <div className="bg-black/80 backdrop-blur-md rounded-xl overflow-hidden max-w-full">
-          {/* Messages - compact */}
-          <div className="max-h-[150px] overflow-y-auto p-2 space-y-1">
-            {displayGroupedMessages.map((group, groupIndex) => (
+      <div className="bg-black/80 backdrop-blur-md rounded-xl overflow-hidden">
+        {/* Messages - compact */}
+        <div className="max-h-[120px] overflow-y-auto p-2 space-y-1">
+          {displayGroupedMessages.length === 0 ? (
+            <p className="text-white/50 text-xs text-center py-2">No messages yet</p>
+          ) : (
+            displayGroupedMessages.map((group, groupIndex) => (
               <div key={groupIndex} className="flex items-start gap-2">
                 <span 
                   className="text-xs font-semibold flex-shrink-0"
@@ -134,32 +135,33 @@ export default function ChatPanel({
                   {group.messages.map(m => m.content).join(' ')}
                 </span>
               </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-          
-          {/* Compact input */}
-          <form onSubmit={handleSubmit} className="p-2 border-t border-white/10">
-            <div className="flex items-center gap-2">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Message..."
-                maxLength={500}
-                className="flex-1 bg-white/10 text-white text-xs px-3 py-2 rounded-lg outline-none placeholder-white/50"
-              />
-              <button
-                type="submit"
-                disabled={!input.trim()}
-                className={`p-2 rounded-lg ${input.trim() ? 'bg-accent-primary text-white' : 'bg-white/10 text-white/50'}`}
-              >
-                <Send className="w-3 h-3" />
-              </button>
-            </div>
-          </form>
+            ))
+          )}
+          <div ref={messagesEndRef} />
         </div>
+        
+        {/* Compact input - font-size 16px prevents iOS zoom */}
+        <form onSubmit={handleSubmit} className="p-2 border-t border-white/10">
+          <div className="flex items-center gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Message..."
+              maxLength={500}
+              style={{ fontSize: '16px' }}
+              className="flex-1 bg-white/10 text-white px-3 py-1.5 rounded-lg outline-none placeholder-white/50"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim()}
+              className={`p-2 rounded-lg flex-shrink-0 ${input.trim() ? 'bg-accent-primary text-white' : 'bg-white/10 text-white/50'}`}
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </form>
       </div>
     );
   }
