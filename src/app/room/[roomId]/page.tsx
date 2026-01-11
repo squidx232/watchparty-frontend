@@ -174,35 +174,50 @@ export default function RoomPage() {
     };
   }, []);
 
+  // Track if audio has been unlocked (Safari/iOS requirement)
+  const audioUnlockedRef = useRef(false);
+
   // Initialize audio element for message notifications
-  // Safari requires audio to be "unlocked" via user interaction
   useEffect(() => {
     audioRef.current = new Audio('/message.mp3');
     audioRef.current.volume = 0.5;
-    
-    // Unlock audio on first user interaction (required for Safari/iOS)
-    const unlockAudio = () => {
-      if (audioRef.current) {
-        // Play and immediately pause to unlock audio context
-        audioRef.current.play().then(() => {
-          audioRef.current?.pause();
-          audioRef.current!.currentTime = 0;
-        }).catch(() => {
-          // Ignore errors during unlock attempt
-        });
-      }
-      // Remove listeners after first interaction
-      document.removeEventListener('touchstart', unlockAudio);
-      document.removeEventListener('click', unlockAudio);
-    };
-    
-    document.addEventListener('touchstart', unlockAudio, { once: true });
-    document.addEventListener('click', unlockAudio, { once: true });
+    // Preload the audio
+    audioRef.current.load();
     
     return () => {
-      document.removeEventListener('touchstart', unlockAudio);
-      document.removeEventListener('click', unlockAudio);
       audioRef.current = null;
+    };
+  }, []);
+
+  // Unlock audio on user interaction (Safari/iOS requires this)
+  useEffect(() => {
+    const unlockAudio = async () => {
+      if (audioUnlockedRef.current || !audioRef.current) return;
+      
+      try {
+        // Create a short silent play to unlock
+        audioRef.current.muted = true;
+        await audioRef.current.play();
+        audioRef.current.pause();
+        audioRef.current.muted = false;
+        audioRef.current.currentTime = 0;
+        audioUnlockedRef.current = true;
+        console.log('Audio unlocked successfully');
+      } catch (err) {
+        // Will retry on next interaction
+      }
+    };
+
+    // Listen for any user interaction
+    const events = ['touchstart', 'touchend', 'click', 'keydown'];
+    events.forEach(event => {
+      document.addEventListener(event, unlockAudio, { passive: true });
+    });
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, unlockAudio);
+      });
     };
   }, []);
 
@@ -213,8 +228,10 @@ export default function RoomPage() {
       // Only play sound if the message is from someone else
       if (lastMessage && lastMessage.senderId !== currentParticipant?.id) {
         if (audioRef.current) {
-          audioRef.current.currentTime = 0; // Reset to start
-          audioRef.current.play().catch(err => {
+          // Clone the audio to allow overlapping sounds and avoid Safari issues
+          const sound = audioRef.current.cloneNode() as HTMLAudioElement;
+          sound.volume = 0.5;
+          sound.play().catch(err => {
             console.log('Could not play notification sound:', err.message);
           });
         }
@@ -321,6 +338,7 @@ export default function RoomPage() {
                 ) : null}
                 showChat={showChat}
                 onToggleChat={() => setShowChat(!showChat)}
+                unreadCount={unreadCount}
               />
             ) : isHyperbeamLoading ? (
               <div className="w-full h-full rounded-2xl bg-background-secondary flex items-center justify-center">

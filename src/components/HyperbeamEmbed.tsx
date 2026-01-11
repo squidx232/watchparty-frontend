@@ -22,6 +22,7 @@ interface HyperbeamEmbedProps {
   chatPanel?: ReactNode;
   showChat?: boolean;
   onToggleChat?: () => void;
+  unreadCount?: number;
 }
 
 export default function HyperbeamEmbed({
@@ -33,6 +34,7 @@ export default function HyperbeamEmbed({
   chatPanel,
   showChat,
   onToggleChat,
+  unreadCount = 0,
 }: HyperbeamEmbedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -411,10 +413,16 @@ export default function HyperbeamEmbed({
             {isAnyFullscreen && onToggleChat && (
               <button
                 onClick={onToggleChat}
-                className="btn-icon w-10 h-10 bg-black/60 hover:bg-black/80 border-transparent pointer-events-auto"
+                className="btn-icon w-10 h-10 bg-black/60 hover:bg-black/80 border-transparent pointer-events-auto relative"
                 title={showChat ? "Hide chat" : "Show chat"}
               >
                 {showChat ? <X className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
+                {/* Unread badge */}
+                {!showChat && unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </button>
             )}
             {/* Fullscreen Toggle */}
