@@ -105,39 +105,68 @@ export default function HyperbeamEmbed({
     }
   }, [isMobileFullscreen]);
 
-  // Toggle fullscreen - uses native API on desktop, pseudo-fullscreen on mobile
+  // Toggle fullscreen - try native API first, then fallback to pseudo-fullscreen
   const toggleFullscreen = useCallback(async () => {
-    try {
-      // Check if native fullscreen is available and working
-      const canUseNativeFullscreen = document.fullscreenEnabled || 
-        (document as any).webkitFullscreenEnabled;
-
-      if (isMobile || !canUseNativeFullscreen) {
-        // Mobile/fallback: toggle pseudo-fullscreen mode
-        const newState = !isMobileFullscreen;
-        setIsMobileFullscreen(newState);
-        setIsFullscreen(newState);
-        onFullscreenChange?.(newState);
-      } else {
-        // Desktop: use native fullscreen API
-        if (!document.fullscreenElement) {
-          const roomContainer = document.getElementById('room-container');
-          if (roomContainer) {
-            await roomContainer.requestFullscreen();
-          }
-        } else {
+    const container = containerRef.current;
+    
+    // Try to exit fullscreen if we're in any fullscreen mode
+    if (isFullscreen || isMobileFullscreen) {
+      try {
+        if (document.fullscreenElement) {
           await document.exitFullscreen();
+        } else if ((document as any).webkitFullscreenElement) {
+          await (document as any).webkitExitFullscreen();
+        } else {
+          // Exit pseudo-fullscreen
+          setIsMobileFullscreen(false);
+          setIsFullscreen(false);
+          onFullscreenChange?.(false);
+        }
+      } catch (err) {
+        console.warn('Exit fullscreen failed:', err);
+        setIsMobileFullscreen(false);
+        setIsFullscreen(false);
+        onFullscreenChange?.(false);
+      }
+      return;
+    }
+
+    // Try to enter fullscreen
+    try {
+      // First try: native fullscreen on the Hyperbeam container itself
+      if (container) {
+        if (container.requestFullscreen) {
+          await container.requestFullscreen();
+          return;
+        } else if ((container as any).webkitRequestFullscreen) {
+          await (container as any).webkitRequestFullscreen();
+          return;
         }
       }
+
+      // Second try: native fullscreen on room container
+      const roomContainer = document.getElementById('room-container');
+      if (roomContainer) {
+        if (roomContainer.requestFullscreen) {
+          await roomContainer.requestFullscreen();
+          return;
+        } else if ((roomContainer as any).webkitRequestFullscreen) {
+          await (roomContainer as any).webkitRequestFullscreen();
+          return;
+        }
+      }
+
+      // Fallback: pseudo-fullscreen
+      setIsMobileFullscreen(true);
+      setIsFullscreen(true);
+      onFullscreenChange?.(true);
     } catch (err) {
-      // Fallback to pseudo-fullscreen if native fails
       console.warn('Native fullscreen failed, using pseudo-fullscreen:', err);
-      const newState = !isMobileFullscreen;
-      setIsMobileFullscreen(newState);
-      setIsFullscreen(newState);
-      onFullscreenChange?.(newState);
+      setIsMobileFullscreen(true);
+      setIsFullscreen(true);
+      onFullscreenChange?.(true);
     }
-  }, [isMobile, isMobileFullscreen, onFullscreenChange]);
+  }, [isFullscreen, isMobileFullscreen, onFullscreenChange]);
 
   // Initialize Hyperbeam SDK - only when embedUrl changes
   useEffect(() => {
@@ -283,13 +312,28 @@ export default function HyperbeamEmbed({
   const isAnyFullscreen = isFullscreen || isMobileFullscreen;
 
   return (
-    <div className={`relative ${isMobileFullscreen ? 'fixed inset-0 z-[9999]' : 'w-full h-full'}`}>
+    <div 
+      className={`relative ${isMobileFullscreen ? 'mobile-fullscreen-container' : 'w-full h-full'}`}
+      style={isMobileFullscreen ? {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 9999,
+        backgroundColor: '#000',
+      } : undefined}
+    >
       {/* Main Container */}
-      <div className={`relative bg-black overflow-hidden shadow-2xl ${
-        isMobileFullscreen 
-          ? 'w-full h-full rounded-none' 
-          : 'w-full h-full rounded-2xl'
-      }`}>
+      <div 
+        className={`relative bg-black overflow-hidden shadow-2xl ${
+          isMobileFullscreen ? 'rounded-none' : 'w-full h-full rounded-2xl'
+        }`}
+        style={isMobileFullscreen ? {
+          width: '100vw',
+          height: '100vh',
+        } : undefined}
+      >
         {/* Loading State */}
         {isLoading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background-secondary z-20">
@@ -341,6 +385,16 @@ export default function HyperbeamEmbed({
             top: 0 !important;
             left: 0 !important;
             border: none !important;
+          }
+          
+          .mobile-fullscreen-container .hyperbeam-container {
+            width: 100vw !important;
+            height: 100vh !important;
+          }
+          
+          .mobile-fullscreen-container .hyperbeam-container iframe {
+            width: 100vw !important;
+            height: 100vh !important;
           }
         `}</style>
 
