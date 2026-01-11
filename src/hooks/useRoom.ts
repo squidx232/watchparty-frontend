@@ -308,5 +308,6 @@ export function useRoom({ roomId, userName, onError }: UseRoomOptions): UseRoomR
     seek,
     changeMedia,
     leaveRoom,
+    socket: socketRef.current,
   };
 }

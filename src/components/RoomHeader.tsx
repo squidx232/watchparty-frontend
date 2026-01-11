@@ -19,6 +19,8 @@ import {
   MoreHorizontal,
   Wifi
 } from 'lucide-react';
+import { Socket } from 'socket.io-client';
+import VoiceCall from './VoiceCall';
 
 interface RoomHeaderProps {
   roomName: string;
@@ -29,6 +31,9 @@ interface RoomHeaderProps {
   showChat: boolean;
   onToggleChat: () => void;
   unreadCount?: number;
+  socket?: Socket | null;
+  currentUserId?: string;
+  currentUserName?: string;
 }
 
 export default function RoomHeader({
@@ -40,6 +45,9 @@ export default function RoomHeader({
   showChat,
   onToggleChat,
   unreadCount = 0,
+  socket,
+  currentUserId,
+  currentUserName,
 }: RoomHeaderProps) {
   const [copied, setCopied] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -89,6 +97,15 @@ export default function RoomHeader({
 
           {/* Right Section - Actions */}
           <div className="flex items-center gap-2">
+            {/* Voice Call */}
+            {socket && currentUserId && currentUserName && (
+              <VoiceCall
+                socket={socket}
+                currentUserId={currentUserId}
+                currentUserName={currentUserName}
+              />
+            )}
+
             {/* Invite Button */}
             <button
               onClick={() => setShowShareModal(true)}

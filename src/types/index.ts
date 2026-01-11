@@ -55,3 +55,10 @@ export interface JoinRoomResponse {
   room?: RoomInfo;
   error?: string;
 }
+
+// Voice call types
+export interface VoiceParticipant {
+  id: string;
+  name: string;
+  isMuted: boolean;
+}
