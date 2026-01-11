@@ -9,7 +9,7 @@
 
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useRoom } from '@/hooks/useRoom';
 import VideoPlayer from '@/components/VideoPlayer';
@@ -33,6 +33,8 @@ export default function RoomPage() {
   const [hyperbeamAvailable, setHyperbeamAvailable] = useState(false);
   const [hyperbeamEmbedUrl, setHyperbeamEmbedUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
+  const prevMessagesLengthRef = useRef(0);
 
   // Get username from URL or localStorage
   useEffect(() => {
@@ -171,6 +173,75 @@ export default function RoomPage() {
     };
   }, []);
 
+  // Sound notification - using preloaded audio element
+  const notificationSoundRef = useRef<HTMLAudioElement | null>(null);
+  const soundEnabledRef = useRef(false);
+
+  // Create audio element and enable on user interaction
+  useEffect(() => {
+    // Create audio element
+    const audio = new Audio('/message.mp3');
+    audio.preload = 'auto';
+    audio.volume = 0.5;
+    notificationSoundRef.current = audio;
+
+    // Enable sound on first user interaction (iOS requirement)
+    const enableSound = () => {
+      if (soundEnabledRef.current) return;
+      
+      // Play silent/muted to unlock audio
+      const unlockAudio = notificationSoundRef.current;
+      if (unlockAudio) {
+        unlockAudio.muted = true;
+        unlockAudio.play().then(() => {
+          unlockAudio.pause();
+          unlockAudio.currentTime = 0;
+          unlockAudio.muted = false;
+          soundEnabledRef.current = true;
+          console.log('[Audio] Sound enabled');
+        }).catch(() => {});
+      }
+    };
+
+    // Listen on multiple events
+    window.addEventListener('touchstart', enableSound, { once: true, passive: true });
+    window.addEventListener('click', enableSound, { once: true, passive: true });
+    window.addEventListener('keydown', enableSound, { once: true, passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', enableSound);
+      window.removeEventListener('click', enableSound);
+      window.removeEventListener('keydown', enableSound);
+      notificationSoundRef.current = null;
+    };
+  }, []);
+
+  // Play sound for new messages
+  useEffect(() => {
+    if (messages.length > prevMessagesLengthRef.current) {
+      const lastMessage = messages[messages.length - 1];
+      // Only play sound if the message is from someone else
+      if (lastMessage && lastMessage.senderId !== currentParticipant?.id) {
+        const audio = notificationSoundRef.current;
+        if (audio && soundEnabledRef.current) {
+          audio.currentTime = 0;
+          audio.play().catch(() => {});
+        }
+      }
+    }
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages, currentParticipant?.id]);
+
+  // Track when chat is opened to mark messages as read
+  useEffect(() => {
+    if (showChat) {
+      setLastSeenMessageCount(messages.length);
+    }
+  }, [showChat, messages.length]);
+
+  // Calculate unread message count
+  const unreadCount = showChat ? 0 : Math.max(0, messages.length - lastSeenMessageCount);
+
   // Handle starting cloud browser session
   const handleStartCloudBrowser = useCallback(async (startUrl?: string) => {
     try {
@@ -233,6 +304,7 @@ export default function RoomPage() {
         onLeave={handleLeave}
         showChat={showChat}
         onToggleChat={() => setShowChat(!showChat)}
+        unreadCount={unreadCount}
       />
 
       {/* Main Content */}
@@ -245,6 +317,20 @@ export default function RoomPage() {
               <HyperbeamEmbed
                 embedUrl={hyperbeamEmbedUrl}
                 isHost={isHost}
+                onFullscreenChange={setIsFullscreen}
+                chatPanel={showChat ? (
+                  <ChatPanel
+                    messages={messages}
+                    currentUserId={currentParticipant?.id || ''}
+                    onSendMessage={sendMessage}
+                    participants={participants}
+                    onClose={() => setShowChat(false)}
+                    isFullscreenMode={true}
+                  />
+                ) : null}
+                showChat={showChat}
+                onToggleChat={() => setShowChat(!showChat)}
+                unreadCount={unreadCount}
               />
             ) : isHyperbeamLoading ? (
               <div className="w-full h-full rounded-2xl bg-background-secondary flex items-center justify-center">

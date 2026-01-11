@@ -9,8 +9,8 @@
 
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { Monitor, Maximize2, Minimize2 } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback, ReactNode } from 'react';
+import { Monitor, Maximize2, Minimize2, MessageCircle, X } from 'lucide-react';
 import Hyperbeam from '@hyperbeam/web';
 
 interface HyperbeamEmbedProps {
@@ -19,6 +19,10 @@ interface HyperbeamEmbedProps {
   onLoad?: () => void;
   onError?: (error: string) => void;
   onFullscreenChange?: (isFullscreen: boolean) => void;
+  chatPanel?: ReactNode;
+  showChat?: boolean;
+  onToggleChat?: () => void;
+  unreadCount?: number;
 }
 
 export default function HyperbeamEmbed({
@@ -27,6 +31,10 @@ export default function HyperbeamEmbed({
   onLoad,
   onError,
   onFullscreenChange,
+  chatPanel,
+  showChat,
+  onToggleChat,
+  unreadCount = 0,
 }: HyperbeamEmbedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,36 +45,136 @@ export default function HyperbeamEmbed({
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMobileFullscreen, setIsMobileFullscreen] = useState(false);
 
-  // Handle fullscreen change events
+  // Detect if we're on mobile
+  const isMobile = typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  // Handle native fullscreen change events
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement;
       setIsFullscreen(isNowFullscreen);
-      onFullscreenChange?.(isNowFullscreen);
+      if (!isNowFullscreen) {
+        setIsMobileFullscreen(false);
+      }
+      onFullscreenChange?.(isNowFullscreen || isMobileFullscreen);
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
-  }, [onFullscreenChange]);
+  }, [onFullscreenChange, isMobileFullscreen]);
 
-  // Toggle fullscreen on the room container to keep UI visible
-  const toggleFullscreen = useCallback(async () => {
-    try {
-      if (!document.fullscreenElement) {
-        const roomContainer = document.getElementById('room-container');
-        if (roomContainer) {
-          await roomContainer.requestFullscreen();
-        }
-      } else {
-        await document.exitFullscreen();
+  // Handle escape key for mobile fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isMobileFullscreen) {
+        setIsMobileFullscreen(false);
+        onFullscreenChange?.(false);
       }
-    } catch (err) {
-      console.error('Fullscreen error:', err);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileFullscreen, onFullscreenChange]);
+
+  // Lock screen orientation when in mobile fullscreen (if supported)
+  useEffect(() => {
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (orientation: string) => Promise<void>;
+      unlock?: () => void;
+    };
+    
+    if (isMobileFullscreen && orientation?.lock) {
+      orientation.lock('landscape').catch(() => {
+        // Silently fail - not all browsers support this
+      });
+    } else if (!isMobileFullscreen && orientation?.unlock) {
+      orientation.unlock();
     }
-  }, []);
+  }, [isMobileFullscreen]);
+
+  // Trigger resize when mobile fullscreen changes to ensure iframe updates
+  useEffect(() => {
+    if (isMobileFullscreen) {
+      // Small delay to let the CSS transition complete, then trigger resize
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+        // Also try to resize the Hyperbeam instance if it has a resize method
+        if (hbInstanceRef.current?.resize) {
+          hbInstanceRef.current.resize();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isMobileFullscreen]);
+
+  // Toggle fullscreen - try native API first, then fallback to pseudo-fullscreen
+  const toggleFullscreen = useCallback(async () => {
+    const container = containerRef.current;
+    
+    // Try to exit fullscreen if we're in any fullscreen mode
+    if (isFullscreen || isMobileFullscreen) {
+      try {
+        if (document.fullscreenElement) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitFullscreenElement) {
+          await (document as any).webkitExitFullscreen();
+        } else {
+          // Exit pseudo-fullscreen
+          setIsMobileFullscreen(false);
+          setIsFullscreen(false);
+          onFullscreenChange?.(false);
+        }
+      } catch (err) {
+        console.warn('Exit fullscreen failed:', err);
+        setIsMobileFullscreen(false);
+        setIsFullscreen(false);
+        onFullscreenChange?.(false);
+      }
+      return;
+    }
+
+    // Try to enter fullscreen
+    try {
+      // First try: native fullscreen on the Hyperbeam container itself
+      if (container) {
+        if (container.requestFullscreen) {
+          await container.requestFullscreen();
+          return;
+        } else if ((container as any).webkitRequestFullscreen) {
+          await (container as any).webkitRequestFullscreen();
+          return;
+        }
+      }
+
+      // Second try: native fullscreen on room container
+      const roomContainer = document.getElementById('room-container');
+      if (roomContainer) {
+        if (roomContainer.requestFullscreen) {
+          await roomContainer.requestFullscreen();
+          return;
+        } else if ((roomContainer as any).webkitRequestFullscreen) {
+          await (roomContainer as any).webkitRequestFullscreen();
+          return;
+        }
+      }
+
+      // Fallback: pseudo-fullscreen
+      setIsMobileFullscreen(true);
+      setIsFullscreen(true);
+      onFullscreenChange?.(true);
+    } catch (err) {
+      console.warn('Native fullscreen failed, using pseudo-fullscreen:', err);
+      setIsMobileFullscreen(true);
+      setIsFullscreen(true);
+      onFullscreenChange?.(true);
+    }
+  }, [isFullscreen, isMobileFullscreen, onFullscreenChange]);
 
   // Initialize Hyperbeam SDK - only when embedUrl changes
   useEffect(() => {
@@ -208,10 +316,32 @@ export default function HyperbeamEmbed({
     );
   }
 
+  // Determine if we're in any fullscreen mode
+  const isAnyFullscreen = isFullscreen || isMobileFullscreen;
+
   return (
-    <div className="relative w-full h-full">
+    <div 
+      className={`relative ${isMobileFullscreen ? 'mobile-fullscreen-container' : 'w-full h-full'}`}
+      style={isMobileFullscreen ? {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 9999,
+        backgroundColor: '#000',
+      } : undefined}
+    >
       {/* Main Container */}
-      <div className="relative w-full h-full bg-black rounded-2xl overflow-hidden shadow-2xl">
+      <div 
+        className={`relative bg-black overflow-hidden shadow-2xl ${
+          isMobileFullscreen ? 'rounded-none' : 'w-full h-full rounded-2xl'
+        }`}
+        style={isMobileFullscreen ? {
+          width: '100vw',
+          height: '100vh',
+        } : undefined}
+      >
         {/* Loading State */}
         {isLoading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background-secondary z-20">
@@ -253,18 +383,72 @@ export default function HyperbeamEmbed({
             bottom: 0,
           }}
         />
+        
+        {/* Global styles to ensure Hyperbeam iframe fills container */}
+        <style jsx global>{`
+          .hyperbeam-container iframe {
+            width: 100% !important;
+            height: 100% !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            border: none !important;
+          }
+          
+          .mobile-fullscreen-container .hyperbeam-container {
+            width: 100vw !important;
+            height: 100vh !important;
+          }
+          
+          .mobile-fullscreen-container .hyperbeam-container iframe {
+            width: 100vw !important;
+            height: 100vh !important;
+          }
+        `}</style>
 
         {/* Control Bar - only show when not loading */}
         {!isLoading && (
           <div className="absolute top-4 right-4 flex items-center gap-2 z-10 pointer-events-none">
+            {/* Chat Toggle - only show in fullscreen mode */}
+            {isAnyFullscreen && onToggleChat && (
+              <button
+                onClick={onToggleChat}
+                className="btn-icon w-10 h-10 bg-black/60 hover:bg-black/80 border-transparent pointer-events-auto relative"
+                title={showChat ? "Hide chat" : "Show chat"}
+              >
+                {showChat ? <X className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
+                {/* Unread badge */}
+                {!showChat && unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+            )}
             {/* Fullscreen Toggle */}
             <button
               onClick={toggleFullscreen}
               className="btn-icon w-10 h-10 bg-black/60 hover:bg-black/80 border-transparent pointer-events-auto"
-              title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              title={isAnyFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             >
-              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              {isAnyFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
+          </div>
+        )}
+
+        {/* Fullscreen Chat Panel Overlay - compact box at bottom left, fixed to viewport */}
+        {isAnyFullscreen && showChat && chatPanel && (
+          <div 
+            className="z-[10000] pointer-events-auto"
+            style={{
+              position: 'fixed',
+              bottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
+              left: 'max(12px, env(safe-area-inset-left, 12px))',
+              width: 'min(260px, 50vw)',
+              maxWidth: 'calc(100vw - 24px)',
+            }}
+          >
+            {chatPanel}
           </div>
         )}
 

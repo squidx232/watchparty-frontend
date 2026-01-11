@@ -20,6 +20,7 @@ interface ChatPanelProps {
   onSendMessage: (content: string) => void;
   participants: Participant[];
   onClose?: () => void;
+  isFullscreenMode?: boolean;
 }
 
 // Quick emoji reactions
@@ -31,40 +32,18 @@ export default function ChatPanel({
   onSendMessage,
   participants,
   onClose,
+  isFullscreenMode = false,
 }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [showEmojis, setShowEmojis] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const prevMessagesLengthRef = useRef(messages.length);
 
-  // Initialize audio element
-  useEffect(() => {
-    audioRef.current = new Audio('/message.mp3');
-    audioRef.current.volume = 0.5;
-    return () => {
-      audioRef.current = null;
-    };
-  }, []);
-
-  // Auto-scroll to bottom when new messages arrive and play sound for received messages
+  // Auto-scroll to bottom when new messages arrive
+  // Note: Sound is handled centrally in the room page to avoid duplicates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    
-    // Check if there's a new message
-    if (messages.length > prevMessagesLengthRef.current) {
-      const lastMessage = messages[messages.length - 1];
-      // Only play sound if the message is from someone else (not the current user)
-      if (lastMessage && lastMessage.senderId !== currentUserId) {
-        audioRef.current?.play().catch(err => {
-          // Ignore autoplay errors (browser may block autoplay)
-          console.log('Could not play notification sound:', err.message);
-        });
-      }
-    }
-    prevMessagesLengthRef.current = messages.length;
-  }, [messages, currentUserId]);
+  }, [messages]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +91,80 @@ export default function ChatPanel({
     }
     return groups;
   }, [] as { senderId: string; senderName: string; messages: ChatMessage[] }[]);
+
+  // For fullscreen mode, only show last 5 messages
+  const displayMessages = isFullscreenMode ? messages.slice(-5) : messages;
+  
+  // Recompute grouped messages for display
+  const displayGroupedMessages = displayMessages.reduce((groups, message, index) => {
+    const prevMessage = displayMessages[index - 1];
+    const isSameSender = prevMessage?.senderId === message.senderId;
+    const isWithinTime = prevMessage && 
+      (new Date(message.timestamp).getTime() - new Date(prevMessage.timestamp).getTime()) < 60000;
+    
+    if (isSameSender && isWithinTime) {
+      groups[groups.length - 1].messages.push(message);
+    } else {
+      groups.push({
+        senderId: message.senderId,
+        senderName: message.senderName,
+        messages: [message],
+      });
+    }
+    return groups;
+  }, [] as { senderId: string; senderName: string; messages: ChatMessage[] }[]);
+
+  // Use different layouts for fullscreen vs normal mode
+  if (isFullscreenMode) {
+    return (
+      <div className="bg-black/80 backdrop-blur-md rounded-xl overflow-hidden">
+        {/* Messages - compact */}
+        <div className="max-h-[120px] overflow-y-auto p-2 space-y-1">
+          {displayGroupedMessages.length === 0 ? (
+            <p className="text-white/50 text-xs text-center py-2">No messages yet</p>
+          ) : (
+            displayGroupedMessages.map((group, groupIndex) => (
+              <div key={groupIndex} className="flex items-start gap-2">
+                <span 
+                  className="text-xs font-semibold flex-shrink-0"
+                  style={{ color: getParticipantColor(group.senderId) }}
+                >
+                  {group.senderName}:
+                </span>
+                <span className="text-xs text-white break-words">
+                  {group.messages.map(m => m.content).join(' ')}
+                </span>
+              </div>
+            ))
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        
+        {/* Compact input - font-size 16px prevents iOS zoom */}
+        <form onSubmit={handleSubmit} className="p-2 border-t border-white/10">
+          <div className="flex items-center gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Message..."
+              maxLength={500}
+              style={{ fontSize: '16px' }}
+              className="flex-1 bg-white/10 text-white px-3 py-1.5 rounded-lg outline-none placeholder-white/50"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim()}
+              className={`p-2 rounded-lg flex-shrink-0 ${input.trim() ? 'bg-accent-primary text-white' : 'bg-white/10 text-white/50'}`}
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="w-80 lg:w-96 h-full flex-shrink-0 flex flex-col glass-heavy rounded-2xl overflow-hidden animate-slide-in-right">
@@ -219,7 +272,13 @@ export default function ChatPanel({
       )}
 
       {/* Input Area */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-glass-border">
+      <form 
+        onSubmit={handleSubmit} 
+        className="p-4 border-t border-glass-border flex-shrink-0"
+        style={isFullscreenMode ? {
+          paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
+        } : undefined}
+      >
         <div className="flex items-center gap-2">
           {/* Emoji Toggle */}
           <button
