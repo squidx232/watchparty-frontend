@@ -76,12 +76,17 @@ export default function HyperbeamEmbed({
 
   // Lock screen orientation when in mobile fullscreen (if supported)
   useEffect(() => {
-    if (isMobileFullscreen && screen.orientation?.lock) {
-      screen.orientation.lock('landscape').catch(() => {
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (orientation: string) => Promise<void>;
+      unlock?: () => void;
+    };
+    
+    if (isMobileFullscreen && orientation?.lock) {
+      orientation.lock('landscape').catch(() => {
         // Silently fail - not all browsers support this
       });
-    } else if (!isMobileFullscreen && screen.orientation?.unlock) {
-      screen.orientation.unlock();
+    } else if (!isMobileFullscreen && orientation?.unlock) {
+      orientation.unlock();
     }
   }, [isMobileFullscreen]);
 
