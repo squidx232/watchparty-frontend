@@ -37,36 +37,87 @@ export default function HyperbeamEmbed({
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMobileFullscreen, setIsMobileFullscreen] = useState(false);
 
-  // Handle fullscreen change events
+  // Detect if we're on mobile
+  const isMobile = typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  // Handle native fullscreen change events
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement;
       setIsFullscreen(isNowFullscreen);
-      onFullscreenChange?.(isNowFullscreen);
+      if (!isNowFullscreen) {
+        setIsMobileFullscreen(false);
+      }
+      onFullscreenChange?.(isNowFullscreen || isMobileFullscreen);
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
-  }, [onFullscreenChange]);
+  }, [onFullscreenChange, isMobileFullscreen]);
 
-  // Toggle fullscreen on the room container to keep UI visible
+  // Handle escape key for mobile fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isMobileFullscreen) {
+        setIsMobileFullscreen(false);
+        onFullscreenChange?.(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileFullscreen, onFullscreenChange]);
+
+  // Lock screen orientation when in mobile fullscreen (if supported)
+  useEffect(() => {
+    if (isMobileFullscreen && screen.orientation?.lock) {
+      screen.orientation.lock('landscape').catch(() => {
+        // Silently fail - not all browsers support this
+      });
+    } else if (!isMobileFullscreen && screen.orientation?.unlock) {
+      screen.orientation.unlock();
+    }
+  }, [isMobileFullscreen]);
+
+  // Toggle fullscreen - uses native API on desktop, pseudo-fullscreen on mobile
   const toggleFullscreen = useCallback(async () => {
     try {
-      if (!document.fullscreenElement) {
-        const roomContainer = document.getElementById('room-container');
-        if (roomContainer) {
-          await roomContainer.requestFullscreen();
-        }
+      // Check if native fullscreen is available and working
+      const canUseNativeFullscreen = document.fullscreenEnabled || 
+        (document as any).webkitFullscreenEnabled;
+
+      if (isMobile || !canUseNativeFullscreen) {
+        // Mobile/fallback: toggle pseudo-fullscreen mode
+        const newState = !isMobileFullscreen;
+        setIsMobileFullscreen(newState);
+        setIsFullscreen(newState);
+        onFullscreenChange?.(newState);
       } else {
-        await document.exitFullscreen();
+        // Desktop: use native fullscreen API
+        if (!document.fullscreenElement) {
+          const roomContainer = document.getElementById('room-container');
+          if (roomContainer) {
+            await roomContainer.requestFullscreen();
+          }
+        } else {
+          await document.exitFullscreen();
+        }
       }
     } catch (err) {
-      console.error('Fullscreen error:', err);
+      // Fallback to pseudo-fullscreen if native fails
+      console.warn('Native fullscreen failed, using pseudo-fullscreen:', err);
+      const newState = !isMobileFullscreen;
+      setIsMobileFullscreen(newState);
+      setIsFullscreen(newState);
+      onFullscreenChange?.(newState);
     }
-  }, []);
+  }, [isMobile, isMobileFullscreen, onFullscreenChange]);
 
   // Initialize Hyperbeam SDK - only when embedUrl changes
   useEffect(() => {
@@ -208,10 +259,17 @@ export default function HyperbeamEmbed({
     );
   }
 
+  // Determine if we're in any fullscreen mode
+  const isAnyFullscreen = isFullscreen || isMobileFullscreen;
+
   return (
-    <div className="relative w-full h-full">
+    <div className={`relative ${isMobileFullscreen ? 'fixed inset-0 z-[9999]' : 'w-full h-full'}`}>
       {/* Main Container */}
-      <div className="relative w-full h-full bg-black rounded-2xl overflow-hidden shadow-2xl">
+      <div className={`relative bg-black overflow-hidden shadow-2xl ${
+        isMobileFullscreen 
+          ? 'w-full h-full rounded-none' 
+          : 'w-full h-full rounded-2xl'
+      }`}>
         {/* Loading State */}
         {isLoading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background-secondary z-20">
@@ -261,9 +319,9 @@ export default function HyperbeamEmbed({
             <button
               onClick={toggleFullscreen}
               className="btn-icon w-10 h-10 bg-black/60 hover:bg-black/80 border-transparent pointer-events-auto"
-              title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              title={isAnyFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             >
-              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              {isAnyFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
           </div>
         )}
