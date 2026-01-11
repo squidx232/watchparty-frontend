@@ -430,7 +430,17 @@ export default function HyperbeamEmbed({
 
         {/* Fullscreen Chat Panel Overlay */}
         {isAnyFullscreen && showChat && chatPanel && (
-          <div className="absolute top-0 right-0 h-full w-80 max-w-[90vw] z-20 pointer-events-auto">
+          <div 
+            className="absolute top-0 right-0 z-20 pointer-events-auto flex flex-col"
+            style={{
+              height: '100%',
+              maxHeight: '100vh',
+              width: 'min(320px, 50vw)',
+              paddingTop: 'env(safe-area-inset-top, 0px)',
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              paddingRight: 'env(safe-area-inset-right, 0px)',
+            }}
+          >
             {chatPanel}
           </div>
         )}

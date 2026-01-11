@@ -175,10 +175,33 @@ export default function RoomPage() {
   }, []);
 
   // Initialize audio element for message notifications
+  // Safari requires audio to be "unlocked" via user interaction
   useEffect(() => {
     audioRef.current = new Audio('/message.mp3');
     audioRef.current.volume = 0.5;
+    
+    // Unlock audio on first user interaction (required for Safari/iOS)
+    const unlockAudio = () => {
+      if (audioRef.current) {
+        // Play and immediately pause to unlock audio context
+        audioRef.current.play().then(() => {
+          audioRef.current?.pause();
+          audioRef.current!.currentTime = 0;
+        }).catch(() => {
+          // Ignore errors during unlock attempt
+        });
+      }
+      // Remove listeners after first interaction
+      document.removeEventListener('touchstart', unlockAudio);
+      document.removeEventListener('click', unlockAudio);
+    };
+    
+    document.addEventListener('touchstart', unlockAudio, { once: true });
+    document.addEventListener('click', unlockAudio, { once: true });
+    
     return () => {
+      document.removeEventListener('touchstart', unlockAudio);
+      document.removeEventListener('click', unlockAudio);
       audioRef.current = null;
     };
   }, []);
@@ -189,9 +212,12 @@ export default function RoomPage() {
       const lastMessage = messages[messages.length - 1];
       // Only play sound if the message is from someone else
       if (lastMessage && lastMessage.senderId !== currentParticipant?.id) {
-        audioRef.current?.play().catch(err => {
-          console.log('Could not play notification sound:', err.message);
-        });
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0; // Reset to start
+          audioRef.current.play().catch(err => {
+            console.log('Could not play notification sound:', err.message);
+          });
+        }
       }
     }
     prevMessagesLengthRef.current = messages.length;
