@@ -274,13 +274,49 @@ export default function VoiceCall({ socket, currentUserId, currentUserName }: Vo
     };
   }, [isInCall, leaveCall]);
 
+  // Total participants in call (including self)
+  const totalInCall = isInCall ? voiceParticipants.length + 1 : voiceParticipants.length;
+
   return (
     <div className="flex items-center gap-2">
-      {/* Voice participants indicator */}
-      {isInCall && voiceParticipants.length > 0 && (
-        <div className="flex items-center gap-1 px-2 py-1 bg-green-500/20 rounded-lg">
-          <Volume2 className="w-4 h-4 text-green-400" />
-          <span className="text-xs text-green-400">{voiceParticipants.length + 1}</span>
+      {/* Voice participants panel - show when in call */}
+      {isInCall && (
+        <div className="flex items-center gap-1 px-3 py-1.5 bg-green-500/20 rounded-lg border border-green-500/30">
+          {/* Mic icon with pulse animation when not muted */}
+          <div className="relative">
+            <Mic className={`w-4 h-4 ${isMuted ? 'text-red-400' : 'text-green-400'}`} />
+            {!isMuted && (
+              <div className="absolute inset-0 w-4 h-4 bg-green-400 rounded-full animate-ping opacity-30" />
+            )}
+          </div>
+          
+          {/* Participant count and names */}
+          <div className="flex items-center gap-1.5 ml-1">
+            <span className="text-xs font-medium text-green-400">{totalInCall}</span>
+            <span className="text-xs text-green-400/70">in call</span>
+            
+            {/* Show participant names (max 2 + "and X more") */}
+            {voiceParticipants.length > 0 && (
+              <div className="hidden sm:flex items-center gap-1 ml-1 pl-2 border-l border-green-500/30">
+                {voiceParticipants.slice(0, 2).map((p, i) => (
+                  <span key={p.id} className="flex items-center gap-1 text-xs text-white/80">
+                    {p.isMuted ? (
+                      <MicOff className="w-3 h-3 text-red-400" />
+                    ) : (
+                      <Mic className="w-3 h-3 text-green-400" />
+                    )}
+                    {p.name}
+                    {i < Math.min(voiceParticipants.length - 1, 1) && ','}
+                  </span>
+                ))}
+                {voiceParticipants.length > 2 && (
+                  <span className="text-xs text-white/50">
+                    +{voiceParticipants.length - 2} more
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
