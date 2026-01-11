@@ -28,6 +28,7 @@ interface RoomHeaderProps {
   onLeave: () => void;
   showChat: boolean;
   onToggleChat: () => void;
+  unreadCount?: number;
 }
 
 export default function RoomHeader({
@@ -38,6 +39,7 @@ export default function RoomHeader({
   onLeave,
   showChat,
   onToggleChat,
+  unreadCount = 0,
 }: RoomHeaderProps) {
   const [copied, setCopied] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -103,8 +105,12 @@ export default function RoomHeader({
               title={showChat ? 'Hide chat' : 'Show chat'}
             >
               <MessageCircle className="w-5 h-5" />
-              {/* Notification dot */}
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-status-error rounded-full" />
+              {/* Notification dot - only show when there are unread messages */}
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-status-error rounded-full flex items-center justify-center text-[10px] font-bold text-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
 
             {/* Settings/More */}

@@ -9,7 +9,7 @@
 
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useRoom } from '@/hooks/useRoom';
 import VideoPlayer from '@/components/VideoPlayer';
@@ -33,6 +33,9 @@ export default function RoomPage() {
   const [hyperbeamAvailable, setHyperbeamAvailable] = useState(false);
   const [hyperbeamEmbedUrl, setHyperbeamEmbedUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const prevMessagesLengthRef = useRef(0);
 
   // Get username from URL or localStorage
   useEffect(() => {
@@ -171,6 +174,39 @@ export default function RoomPage() {
     };
   }, []);
 
+  // Initialize audio element for message notifications
+  useEffect(() => {
+    audioRef.current = new Audio('/message.mp3');
+    audioRef.current.volume = 0.5;
+    return () => {
+      audioRef.current = null;
+    };
+  }, []);
+
+  // Play sound for new messages (centralized - works whether chat is open or closed)
+  useEffect(() => {
+    if (messages.length > prevMessagesLengthRef.current) {
+      const lastMessage = messages[messages.length - 1];
+      // Only play sound if the message is from someone else
+      if (lastMessage && lastMessage.senderId !== currentParticipant?.id) {
+        audioRef.current?.play().catch(err => {
+          console.log('Could not play notification sound:', err.message);
+        });
+      }
+    }
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages, currentParticipant?.id]);
+
+  // Track when chat is opened to mark messages as read
+  useEffect(() => {
+    if (showChat) {
+      setLastSeenMessageCount(messages.length);
+    }
+  }, [showChat, messages.length]);
+
+  // Calculate unread message count
+  const unreadCount = showChat ? 0 : Math.max(0, messages.length - lastSeenMessageCount);
+
   // Handle starting cloud browser session
   const handleStartCloudBrowser = useCallback(async (startUrl?: string) => {
     try {
@@ -233,6 +269,7 @@ export default function RoomPage() {
         onLeave={handleLeave}
         showChat={showChat}
         onToggleChat={() => setShowChat(!showChat)}
+        unreadCount={unreadCount}
       />
 
       {/* Main Content */}

@@ -38,35 +38,12 @@ export default function ChatPanel({
   const [showEmojis, setShowEmojis] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const prevMessagesLengthRef = useRef(messages.length);
 
-  // Initialize audio element
-  useEffect(() => {
-    audioRef.current = new Audio('/message.mp3');
-    audioRef.current.volume = 0.5;
-    return () => {
-      audioRef.current = null;
-    };
-  }, []);
-
-  // Auto-scroll to bottom when new messages arrive and play sound for received messages
+  // Auto-scroll to bottom when new messages arrive
+  // Note: Sound is handled centrally in the room page to avoid duplicates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    
-    // Check if there's a new message
-    if (messages.length > prevMessagesLengthRef.current) {
-      const lastMessage = messages[messages.length - 1];
-      // Only play sound if the message is from someone else (not the current user)
-      if (lastMessage && lastMessage.senderId !== currentUserId) {
-        audioRef.current?.play().catch(err => {
-          // Ignore autoplay errors (browser may block autoplay)
-          console.log('Could not play notification sound:', err.message);
-        });
-      }
-    }
-    prevMessagesLengthRef.current = messages.length;
-  }, [messages, currentUserId]);
+  }, [messages]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
