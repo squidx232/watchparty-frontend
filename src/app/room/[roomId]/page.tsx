@@ -68,6 +68,7 @@ export default function RoomPage() {
     seek,
     changeMedia,
     leaveRoom,
+    socket,
   } = useRoom({
     roomId,
     userName: userName || 'Anonymous',
@@ -305,6 +306,9 @@ export default function RoomPage() {
         showChat={showChat}
         onToggleChat={() => setShowChat(!showChat)}
         unreadCount={unreadCount}
+        socket={socket}
+        currentUserId={currentParticipant?.id}
+        currentUserName={currentParticipant?.name}
       />
 
       {/* Main Content */}

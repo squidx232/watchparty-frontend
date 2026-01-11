@@ -53,6 +53,9 @@ interface UseRoomReturn {
   
   // Room actions
   leaveRoom: () => void;
+  
+  // Socket instance for voice calls
+  socket: Socket | null;
 }
 
 export function useRoom({ roomId, userName, onError }: UseRoomOptions): UseRoomReturn {
@@ -308,5 +311,6 @@ export function useRoom({ roomId, userName, onError }: UseRoomOptions): UseRoomR
     seek,
     changeMedia,
     leaveRoom,
+    socket: socketRef.current,
   };
 }
