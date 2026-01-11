@@ -245,6 +245,19 @@ export default function RoomPage() {
               <HyperbeamEmbed
                 embedUrl={hyperbeamEmbedUrl}
                 isHost={isHost}
+                onFullscreenChange={setIsFullscreen}
+                chatPanel={showChat ? (
+                  <ChatPanel
+                    messages={messages}
+                    currentUserId={currentParticipant?.id || ''}
+                    onSendMessage={sendMessage}
+                    participants={participants}
+                    onClose={() => setShowChat(false)}
+                    isFullscreenMode={true}
+                  />
+                ) : null}
+                showChat={showChat}
+                onToggleChat={() => setShowChat(!showChat)}
               />
             ) : isHyperbeamLoading ? (
               <div className="w-full h-full rounded-2xl bg-background-secondary flex items-center justify-center">

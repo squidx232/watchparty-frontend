@@ -20,6 +20,7 @@ interface ChatPanelProps {
   onSendMessage: (content: string) => void;
   participants: Participant[];
   onClose?: () => void;
+  isFullscreenMode?: boolean;
 }
 
 // Quick emoji reactions
@@ -31,6 +32,7 @@ export default function ChatPanel({
   onSendMessage,
   participants,
   onClose,
+  isFullscreenMode = false,
 }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [showEmojis, setShowEmojis] = useState(false);
@@ -114,7 +116,11 @@ export default function ChatPanel({
   }, [] as { senderId: string; senderName: string; messages: ChatMessage[] }[]);
 
   return (
-    <div className="w-80 lg:w-96 h-full flex-shrink-0 flex flex-col glass-heavy rounded-2xl overflow-hidden animate-slide-in-right">
+    <div className={`flex flex-col glass-heavy overflow-hidden ${
+      isFullscreenMode 
+        ? 'w-full h-full rounded-none bg-background-primary/95 backdrop-blur-xl' 
+        : 'w-80 lg:w-96 h-full flex-shrink-0 rounded-2xl animate-slide-in-right'
+    }`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-glass-border">
         <div className="flex items-center gap-3">

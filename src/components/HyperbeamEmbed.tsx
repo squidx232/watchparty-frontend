@@ -9,8 +9,8 @@
 
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { Monitor, Maximize2, Minimize2 } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback, ReactNode } from 'react';
+import { Monitor, Maximize2, Minimize2, MessageCircle, X } from 'lucide-react';
 import Hyperbeam from '@hyperbeam/web';
 
 interface HyperbeamEmbedProps {
@@ -19,6 +19,9 @@ interface HyperbeamEmbedProps {
   onLoad?: () => void;
   onError?: (error: string) => void;
   onFullscreenChange?: (isFullscreen: boolean) => void;
+  chatPanel?: ReactNode;
+  showChat?: boolean;
+  onToggleChat?: () => void;
 }
 
 export default function HyperbeamEmbed({
@@ -27,6 +30,9 @@ export default function HyperbeamEmbed({
   onLoad,
   onError,
   onFullscreenChange,
+  chatPanel,
+  showChat,
+  onToggleChat,
 }: HyperbeamEmbedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -401,6 +407,16 @@ export default function HyperbeamEmbed({
         {/* Control Bar - only show when not loading */}
         {!isLoading && (
           <div className="absolute top-4 right-4 flex items-center gap-2 z-10 pointer-events-none">
+            {/* Chat Toggle - only show in fullscreen mode */}
+            {isAnyFullscreen && onToggleChat && (
+              <button
+                onClick={onToggleChat}
+                className="btn-icon w-10 h-10 bg-black/60 hover:bg-black/80 border-transparent pointer-events-auto"
+                title={showChat ? "Hide chat" : "Show chat"}
+              >
+                {showChat ? <X className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
+              </button>
+            )}
             {/* Fullscreen Toggle */}
             <button
               onClick={toggleFullscreen}
@@ -409,6 +425,13 @@ export default function HyperbeamEmbed({
             >
               {isAnyFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
+          </div>
+        )}
+
+        {/* Fullscreen Chat Panel Overlay */}
+        {isAnyFullscreen && showChat && chatPanel && (
+          <div className="absolute top-0 right-0 h-full w-80 max-w-[90vw] z-20 pointer-events-auto">
+            {chatPanel}
           </div>
         )}
 
