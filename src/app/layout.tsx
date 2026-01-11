@@ -12,6 +12,17 @@ export const metadata: Metadata = {
     shortcut: '/logo.png',
     apple: '/logo.png',
   },
+  openGraph: {
+    title: 'Pillow Watch - Cozy Watch Parties',
+    description: 'Get cozy and watch videos together with friends. Your virtual living room for movie nights.',
+    images: ['/OGimage.png'],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Pillow Watch - Cozy Watch Parties',
+    description: 'Get cozy and watch videos together with friends. Your virtual living room for movie nights.',
+    images: ['/OGimage.png'],
+  },
 };
 
 export default function RootLayout({
