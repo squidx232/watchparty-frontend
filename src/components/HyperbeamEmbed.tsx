@@ -90,6 +90,21 @@ export default function HyperbeamEmbed({
     }
   }, [isMobileFullscreen]);
 
+  // Trigger resize when mobile fullscreen changes to ensure iframe updates
+  useEffect(() => {
+    if (isMobileFullscreen) {
+      // Small delay to let the CSS transition complete, then trigger resize
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+        // Also try to resize the Hyperbeam instance if it has a resize method
+        if (hbInstanceRef.current?.resize) {
+          hbInstanceRef.current.resize();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isMobileFullscreen]);
+
   // Toggle fullscreen - uses native API on desktop, pseudo-fullscreen on mobile
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -316,6 +331,18 @@ export default function HyperbeamEmbed({
             bottom: 0,
           }}
         />
+        
+        {/* Global styles to ensure Hyperbeam iframe fills container */}
+        <style jsx global>{`
+          .hyperbeam-container iframe {
+            width: 100% !important;
+            height: 100% !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            border: none !important;
+          }
+        `}</style>
 
         {/* Control Bar - only show when not loading */}
         {!isLoading && (
