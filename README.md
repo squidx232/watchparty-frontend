@@ -59,6 +59,7 @@ things i want to add to scale this:
 - [ ] mobile app version
 - [ ] playlist queue system
 - [ ] room moderation tools
+- [ ] live music radio playing in sync
 - [ ] analytics dashboard
 - [ ] premium features for power users
 
