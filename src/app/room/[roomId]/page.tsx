@@ -131,8 +131,17 @@ export default function RoomPage() {
     // For viewers, poll for the session to be created by host
     if (!actualIsHost && hyperbeamAvailable) {
       console.log('[Room] Viewer polling for session...');
+      let pollCount = 0;
+      const maxPolls = 30; // Max 30 attempts (60 seconds at 2s intervals)
       
       const pollInterval = setInterval(async () => {
+        pollCount++;
+        if (pollCount > maxPolls) {
+          console.log('[Room] Viewer polling timed out after', maxPolls, 'attempts');
+          clearInterval(pollInterval);
+          return;
+        }
+        
         try {
           const session = await getCloudBrowserSession(roomId, false);
           if (session) {
@@ -142,9 +151,9 @@ export default function RoomPage() {
             clearInterval(pollInterval);
           }
         } catch (error) {
-          // Session not ready yet, keep polling
+          // Session not ready yet, keep polling (but don't log to reduce noise)
         }
-      }, 2000); // Poll every 2 seconds
+      }, 3000); // Poll every 3 seconds (less aggressive)
       
       return () => clearInterval(pollInterval);
     }
