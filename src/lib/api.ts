@@ -129,6 +129,8 @@ export async function createCloudBrowserSession(
 /**
  * Create cloud browser session with automatic retry on rate limit
  * Shows countdown and retries automatically
+ * 
+ * Uses the actual cooldown time from backend (can be up to 60s)
  */
 export async function createCloudBrowserSessionWithRetry(
   roomId: string,
@@ -145,10 +147,13 @@ export async function createCloudBrowserSessionWithRetry(
     } catch (error) {
       if (error instanceof RateLimitError) {
         lastError = error;
-        console.log(`[API] Rate limited, waiting ${error.retryAfterSeconds}s before retry (attempt ${attempt + 1}/${maxRetries})`);
+        
+        // Use the actual retry time from backend (minimum 5 seconds to avoid spam)
+        const waitSeconds = Math.max(5, error.retryAfterSeconds);
+        console.log(`[API] Rate limited, waiting ${waitSeconds}s before retry (attempt ${attempt + 1}/${maxRetries})`);
         
         // Countdown with callback
-        let remaining = error.retryAfterSeconds;
+        let remaining = waitSeconds;
         while (remaining > 0) {
           onRateLimitCountdown?.(remaining);
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -157,7 +162,7 @@ export async function createCloudBrowserSessionWithRetry(
         onRateLimitCountdown?.(0);
         
         // Add small buffer before retry
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } else {
         // Non-rate-limit error, throw immediately
         throw error;

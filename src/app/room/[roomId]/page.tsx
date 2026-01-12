@@ -114,6 +114,9 @@ export default function RoomPage() {
     const actualIsHost = currentParticipant.role === 'host';
     console.log('[Room] Initializing cloud browser, isHost:', actualIsHost);
     
+    // Track if effect is still mounted
+    let isMounted = true;
+    
     const initCloudBrowser = async () => {
       // LAYER 3: Prevent concurrent initialization attempts
       if (initializingRef.current) {
@@ -125,12 +128,16 @@ export default function RoomPage() {
       
       try {
         const { available } = await getHyperbeamStatus();
+        if (!isMounted) return; // Component unmounted during fetch
+        
         console.log('[Room] Hyperbeam available:', available);
         setHyperbeamAvailable(available);
         
         if (available) {
           // Check if session already exists, get URL with proper permissions
           const existingSession = await getCloudBrowserSession(roomId, actualIsHost);
+          if (!isMounted) return; // Component unmounted during fetch
+          
           console.log('[Room] Existing session:', existingSession);
           if (existingSession) {
             console.log('[Room] Using existing session URL:', existingSession.embedUrl);
@@ -146,10 +153,12 @@ export default function RoomPage() {
               actualIsHost,
               undefined, // startUrl
               (secondsRemaining) => {
-                setRateLimitCountdown(secondsRemaining);
+                if (isMounted) setRateLimitCountdown(secondsRemaining);
               },
               3 // maxRetries
             );
+            
+            if (!isMounted) return; // Component unmounted during creation
             
             console.log('[Room] Created session URL:', result.embedUrl);
             setHyperbeamEmbedUrl(result.embedUrl);
@@ -161,11 +170,16 @@ export default function RoomPage() {
           }
         }
       } catch (error: any) {
+        if (!isMounted) return; // Component unmounted, ignore error
+        
         console.error('Failed to initialize cloud browser:', error);
         
         // LAYER 2: Handle rate limit errors gracefully
         if (error.isRateLimited || error.name === 'RateLimitError') {
-          setHyperbeamError(`Rate limited. Retried ${3} times but still limited. Please wait and try again.`);
+          setHyperbeamError(`Rate limited. Please wait a moment and refresh the page.`);
+        } else if (error.message?.includes('Failed to fetch')) {
+          // Network error - likely page navigation or unmount
+          console.log('[Room] Network error during initialization (page may have navigated)');
         } else {
           setHyperbeamError(error.message || 'Failed to initialize cloud browser');
         }
@@ -176,6 +190,11 @@ export default function RoomPage() {
     };
     
     initCloudBrowser();
+    
+    // Cleanup: mark as unmounted
+    return () => {
+      isMounted = false;
+    };
   }, [isJoined, roomId, currentParticipant, hyperbeamEmbedUrl]);
 
   // Poll for session if viewer doesn't have embed URL yet
