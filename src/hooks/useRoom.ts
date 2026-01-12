@@ -18,6 +18,26 @@ import type { Participant, ChatMessage, PlaybackState, RoomInfo, HyperbeamSessio
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001';
 
+// Sound file paths
+const SOUNDS = {
+  roomJoin: '/RoomJoin.mp3',
+  callJoin: '/CallJoin.mp3',
+};
+
+// Utility to play a sound
+function playSound(soundPath: string): void {
+  try {
+    const audio = new Audio(soundPath);
+    audio.volume = 0.5; // 50% volume to not be too loud
+    audio.play().catch((err) => {
+      // Silently handle autoplay restrictions
+      console.log('[Sound] Could not play sound (autoplay may be blocked):', err.message);
+    });
+  } catch (err) {
+    console.log('[Sound] Error creating audio:', err);
+  }
+}
+
 interface UseRoomOptions {
   roomId: string;
   userName: string;
@@ -151,6 +171,8 @@ export function useRoom({ roomId, userName, onError }: UseRoomOptions): UseRoomR
         if (prev.some(p => p.id === participant.id)) return prev;
         return [...prev, participant];
       });
+      // Play room join sound for all users in the room
+      playSound(SOUNDS.roomJoin);
     });
 
     socket.on('room:participant-left', (participantId) => {

@@ -11,6 +11,23 @@ interface VoiceCallProps {
   currentUserName: string;
 }
 
+// Sound file path for call join
+const CALL_JOIN_SOUND = '/CallJoin.mp3';
+
+// Utility to play a sound
+function playSound(soundPath: string): void {
+  try {
+    const audio = new Audio(soundPath);
+    audio.volume = 0.5; // 50% volume to not be too loud
+    audio.play().catch((err) => {
+      // Silently handle autoplay restrictions
+      console.log('[Sound] Could not play sound (autoplay may be blocked):', err.message);
+    });
+  } catch (err) {
+    console.log('[Sound] Error creating audio:', err);
+  }
+}
+
 // ICE servers for WebRTC connection
 const ICE_SERVERS = {
   iceServers: [
@@ -199,6 +216,8 @@ export default function VoiceCall({ socket, currentUserId, currentUserName }: Vo
       // Create peer connection (they will send offer)
       if (isInCall && participant.id !== currentUserId) {
         createPeerConnection(participant.id, false);
+        // Play call join sound for all users in the call
+        playSound(CALL_JOIN_SOUND);
       }
     });
 
