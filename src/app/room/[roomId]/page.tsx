@@ -104,10 +104,12 @@ export default function RoomPage() {
 
   // Check cloud browser availability and auto-start session when joined
   // LAYER 3: Prevents duplicate initialization using ref + sessionStorage
+  // NOTE: We still need to fetch the URL even if initialized (URL is not persisted)
   useEffect(() => {
     if (!isJoined || !currentParticipant) return;
-    if (hasInitializedHyperbeam) return; // Already initialized, don't re-run
     if (initializingRef.current) return; // Already in progress, prevent race condition
+    // Skip only if we already have the URL (not just the flag)
+    if (hyperbeamEmbedUrl) return;
     
     const actualIsHost = currentParticipant.role === 'host';
     console.log('[Room] Initializing cloud browser, isHost:', actualIsHost);
@@ -174,13 +176,12 @@ export default function RoomPage() {
     };
     
     initCloudBrowser();
-  }, [isJoined, roomId, currentParticipant, hasInitializedHyperbeam]);
+  }, [isJoined, roomId, currentParticipant, hyperbeamEmbedUrl]);
 
   // Poll for session if viewer doesn't have embed URL yet
   // Always use getCloudBrowserSession API to get the correct URL with proper permissions
   useEffect(() => {
     if (hyperbeamEmbedUrl) return; // Already have URL
-    if (hasInitializedHyperbeam) return; // Already initialized
     if (!isJoined || !currentParticipant) return;
     
     const actualIsHost = currentParticipant.role === 'host';
@@ -214,7 +215,7 @@ export default function RoomPage() {
       
       return () => clearInterval(pollInterval);
     }
-  }, [hyperbeamEmbedUrl, roomId, isJoined, currentParticipant, hyperbeamAvailable, hasInitializedHyperbeam]);
+  }, [hyperbeamEmbedUrl, roomId, isJoined, currentParticipant, hyperbeamAvailable]);
 
   // Listen for fullscreen changes (including ESC key exit)
   useEffect(() => {
