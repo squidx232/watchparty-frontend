@@ -4,6 +4,24 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+// Global rate limit tracking to prevent hammering the API across page navigations
+let globalRateLimitUntil: number = 0;
+
+/**
+ * Check if we're currently rate limited (before making API calls)
+ */
+export function isGloballyRateLimited(): boolean {
+  return Date.now() < globalRateLimitUntil;
+}
+
+/**
+ * Get remaining rate limit seconds
+ */
+export function getGlobalRateLimitRemaining(): number {
+  const remaining = Math.ceil((globalRateLimitUntil - Date.now()) / 1000);
+  return Math.max(0, remaining);
+}
+
 export interface CreateRoomParams {
   hostName: string;
   roomName?: string;
@@ -102,6 +120,15 @@ export async function createCloudBrowserSession(
   isHost: boolean,
   startUrl?: string
 ): Promise<{ success: boolean; embedUrl: string; sessionId: string; reused?: boolean; recovered?: boolean }> {
+  // Check global rate limit BEFORE making the request
+  if (isGloballyRateLimited()) {
+    const remainingMs = globalRateLimitUntil - Date.now();
+    throw new RateLimitError(
+      `Rate limited. Please wait ${Math.ceil(remainingMs / 1000)} seconds.`,
+      remainingMs
+    );
+  }
+
   const response = await fetch(`${API_URL}/api/rooms/${roomId}/hyperbeam`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -114,6 +141,10 @@ export async function createCloudBrowserSession(
     // Handle rate limiting specifically
     if (response.status === 429 && error.isRateLimited) {
       const retryAfterMs = error.retryAfterMs || 60000;
+      // Set global rate limit to prevent other requests
+      globalRateLimitUntil = Date.now() + retryAfterMs;
+      console.log(`[API] Global rate limit set for ${Math.ceil(retryAfterMs / 1000)}s`);
+      
       throw new RateLimitError(
         error.message || `Rate limited. Please wait ${Math.ceil(retryAfterMs / 1000)} seconds.`,
         retryAfterMs
@@ -123,6 +154,8 @@ export async function createCloudBrowserSession(
     throw new Error(error.error || 'Failed to create cloud browser session');
   }
 
+  // Clear rate limit on success
+  globalRateLimitUntil = 0;
   return response.json();
 }
 

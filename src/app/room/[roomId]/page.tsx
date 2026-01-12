@@ -20,7 +20,7 @@ import MediaControls from '@/components/MediaControls';
 import RoomHeader from '@/components/RoomHeader';
 import LoadingScreen from '@/components/LoadingScreen';
 import ErrorScreen from '@/components/ErrorScreen';
-import { createCloudBrowserSessionWithRetry, terminateCloudBrowserSession, getHyperbeamStatus, getCloudBrowserSession, RateLimitError } from '@/lib/api';
+import { createCloudBrowserSessionWithRetry, terminateCloudBrowserSession, getHyperbeamStatus, getCloudBrowserSession, RateLimitError, isGloballyRateLimited, getGlobalRateLimitRemaining } from '@/lib/api';
 
 export default function RoomPage() {
   const params = useParams();
@@ -42,6 +42,26 @@ export default function RoomPage() {
   
   // LAYER 3: Use ref to prevent duplicate initialization during reconnects
   const initializingRef = useRef(false);
+
+  // Check global rate limit on mount (persists across room navigations)
+  useEffect(() => {
+    if (isGloballyRateLimited()) {
+      const remaining = getGlobalRateLimitRemaining();
+      console.log(`[Room] Global rate limit active: ${remaining}s remaining`);
+      setRateLimitCountdown(remaining);
+      
+      // Start countdown
+      const interval = setInterval(() => {
+        const newRemaining = getGlobalRateLimitRemaining();
+        setRateLimitCountdown(newRemaining);
+        if (newRemaining <= 0) {
+          clearInterval(interval);
+        }
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, []);
 
   // Get username from URL or localStorage
   useEffect(() => {
