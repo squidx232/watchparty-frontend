@@ -96,6 +96,7 @@ export default function RoomPage() {
     changeMedia,
     leaveRoom,
     socket,
+    hyperbeamSession,
   } = useRoom({
     roomId,
     userName: userName || 'Anonymous',
@@ -217,8 +218,19 @@ export default function RoomPage() {
     };
   }, [isJoined, roomId, currentParticipant, hyperbeamEmbedUrl]);
 
-  // Poll for session if viewer doesn't have embed URL yet
-  // Always use getCloudBrowserSession API to get the correct URL with proper permissions
+  // Use WebSocket notification for viewers when host creates a session
+  // This is faster and more reliable than polling
+  useEffect(() => {
+    if (hyperbeamEmbedUrl) return; // Already have URL
+    if (!hyperbeamSession) return; // No session from WebSocket yet
+    
+    console.log('[Room] Received Hyperbeam session via WebSocket:', hyperbeamSession.embedUrl);
+    setHyperbeamEmbedUrl(hyperbeamSession.embedUrl);
+    setHasInitializedHyperbeam(true);
+  }, [hyperbeamSession, hyperbeamEmbedUrl]);
+
+  // Fallback: Poll for session if viewer doesn't have embed URL yet
+  // This handles cases where the WebSocket event was missed (e.g., late join)
   useEffect(() => {
     if (hyperbeamEmbedUrl) return; // Already have URL
     if (!isJoined || !currentParticipant) return;
@@ -227,7 +239,7 @@ export default function RoomPage() {
     
     // For viewers, poll for the session to be created by host
     if (!actualIsHost && hyperbeamAvailable) {
-      console.log('[Room] Viewer polling for session...');
+      console.log('[Room] Viewer polling for session (fallback)...');
       let pollCount = 0;
       const maxPolls = 30; // Max 30 attempts (60 seconds at 2s intervals)
       
@@ -242,7 +254,7 @@ export default function RoomPage() {
         try {
           const session = await getCloudBrowserSession(roomId, false);
           if (session) {
-            console.log('[Room] Viewer got session URL:', session.embedUrl);
+            console.log('[Room] Viewer got session URL via polling:', session.embedUrl);
             setHyperbeamEmbedUrl(session.embedUrl);
             setHasInitializedHyperbeam(true);
             clearInterval(pollInterval);

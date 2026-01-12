@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import type { Participant, ChatMessage, PlaybackState, RoomInfo } from '@/types';
+import type { Participant, ChatMessage, PlaybackState, RoomInfo, HyperbeamSession } from '@/types';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001';
 
@@ -56,6 +56,9 @@ interface UseRoomReturn {
   
   // Socket instance for voice calls
   socket: Socket | null;
+  
+  // Hyperbeam session (received via WebSocket when host creates it)
+  hyperbeamSession: { embedUrl: string } | null;
 }
 
 export function useRoom({ roomId, userName, onError }: UseRoomOptions): UseRoomReturn {
@@ -75,6 +78,7 @@ export function useRoom({ roomId, userName, onError }: UseRoomOptions): UseRoomR
   });
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [hyperbeamSession, setHyperbeamSession] = useState<{ embedUrl: string } | null>(null);
   
   // Use refs to avoid dependency issues
   const socketRef = useRef<Socket | null>(null);
@@ -237,6 +241,18 @@ export function useRoom({ roomId, userName, onError }: UseRoomOptions): UseRoomR
       setMessages(prev => [...prev, message]);
     });
 
+    // Hyperbeam session event (when host creates a session)
+    socket.on('hyperbeam:session', (data) => {
+      console.log('[Socket] Hyperbeam session ready:', data.embedUrl);
+      setHyperbeamSession({ embedUrl: data.embedUrl });
+    });
+
+    // Hyperbeam ended event
+    socket.on('hyperbeam:ended', () => {
+      console.log('[Socket] Hyperbeam session ended');
+      setHyperbeamSession(null);
+    });
+
     // Error events
     socket.on('error', (errorMsg) => {
       console.error('[Socket Error]', errorMsg);
@@ -312,5 +328,6 @@ export function useRoom({ roomId, userName, onError }: UseRoomOptions): UseRoomR
     changeMedia,
     leaveRoom,
     socket: socketRef.current,
+    hyperbeamSession,
   };
 }
