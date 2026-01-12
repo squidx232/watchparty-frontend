@@ -170,6 +170,7 @@ export async function createCloudBrowserSessionWithRetry(
 
 /**
  * Get existing cloud browser session for a room
+ * Returns null if no session exists or if session has expired
  */
 export async function getCloudBrowserSession(
   roomId: string,
@@ -178,6 +179,15 @@ export async function getCloudBrowserSession(
   const response = await fetch(`${API_URL}/api/rooms/${roomId}/hyperbeam?isHost=${isHost}`);
 
   if (response.status === 404) {
+    // Check if it's an expired session
+    try {
+      const data = await response.json();
+      if (data.expired) {
+        console.log('[API] Session expired, will need to create new one');
+      }
+    } catch {
+      // Ignore JSON parse errors
+    }
     return null;
   }
 
