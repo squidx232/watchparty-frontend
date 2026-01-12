@@ -68,9 +68,14 @@
 
 ### 🔧 Recent Fixes
 
+#### Session Pool Database Persistence (2026-01-12)
+- **Problem**: Pool sessions couldn't be recovered after restart - Hyperbeam's list API doesn't return `admin_token`
+- **Fix**: Save session `admin_token` to database when created, load on startup
+- **File**: `backend/src/services/HyperbeamSessionPool.ts`
+
 #### Hyperbeam API Response Parsing (2026-01-12)
 - **Problem**: API returns paginated `{"results": [...], "next": ...}` not direct array
-- **Fix**: Updated `listActiveSessions()` to handle paginated response
+- **Fix**: Updated `listActiveSessions()` to handle paginated response and map `id` to `session_id`
 - **File**: `backend/src/services/HyperbeamService.ts`
 
 #### Rate Limit Handling
