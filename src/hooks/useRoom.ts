@@ -28,7 +28,7 @@ const SOUNDS = {
 function playSound(soundPath: string): void {
   try {
     const audio = new Audio(soundPath);
-    audio.volume = 0.5; // 50% volume to not be too loud
+    audio.volume = 0.8; // 80% volume for better audibility
     audio.play().catch((err) => {
       // Silently handle autoplay restrictions
       console.log('[Sound] Could not play sound (autoplay may be blocked):', err.message);

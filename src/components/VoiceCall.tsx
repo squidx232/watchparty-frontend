@@ -18,7 +18,7 @@ const CALL_JOIN_SOUND = '/CallJoin.mp3';
 function playSound(soundPath: string): void {
   try {
     const audio = new Audio(soundPath);
-    audio.volume = 0.5; // 50% volume to not be too loud
+    audio.volume = 0.8; // 80% volume for better audibility
     audio.play().catch((err) => {
       // Silently handle autoplay restrictions
       console.log('[Sound] Could not play sound (autoplay may be blocked):', err.message);
@@ -213,11 +213,14 @@ export default function VoiceCall({ socket, currentUserId, currentUserName }: Vo
       console.log('[Voice] Participant joined:', participant.name);
       setVoiceParticipants(prev => [...prev.filter(p => p.id !== participant.id), participant]);
       
+      // Play call join sound for all users in the call (when someone else joins)
+      if (participant.id !== currentUserId) {
+        playSound(CALL_JOIN_SOUND);
+      }
+      
       // Create peer connection (they will send offer)
       if (isInCall && participant.id !== currentUserId) {
         createPeerConnection(participant.id, false);
-        // Play call join sound for all users in the call
-        playSound(CALL_JOIN_SOUND);
       }
     });
 
