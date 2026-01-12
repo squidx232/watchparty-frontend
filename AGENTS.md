@@ -68,6 +68,11 @@
 
 ### 🔧 Recent Fixes
 
+#### Dead Session Cleanup (2026-01-12)
+- **Problem**: Pool was allocating terminated sessions to rooms, causing `SessionTerminatedError`
+- **Fix**: Added `cleanupDeadSessions()` method, keep-alive now verifies sessions are active
+- **File**: `backend/src/services/HyperbeamSessionPool.ts`
+
 #### Session Pool Database Persistence (2026-01-12)
 - **Problem**: Pool sessions couldn't be recovered after restart - Hyperbeam's list API doesn't return `admin_token`
 - **Fix**: Save session `admin_token` to database when created, load on startup
