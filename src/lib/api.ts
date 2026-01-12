@@ -254,3 +254,131 @@ export async function terminateCloudBrowserSession(roomId: string): Promise<void
 // Legacy aliases for backward compatibility
 export const createHyperbeamSession = createCloudBrowserSession;
 export const terminateHyperbeamSession = terminateCloudBrowserSession;
+
+// ============================================
+// Admin API Functions
+// ============================================
+
+export interface AdminRoom {
+  id: string;
+  name: string;
+  hostId: string;
+  participantCount: number;
+  participants: Array<{ id: string; name: string; role: string }>;
+  mediaUrl: string;
+  mediaType: string;
+  hasHyperbeam: boolean;
+  hyperbeamSessionId?: string;
+  createdAt: string;
+  lastActivity: string;
+}
+
+export interface HyperbeamSessionInfo {
+  session_id: string;
+  embed_url: string;
+  admin_token?: string;
+  created_at?: string;
+}
+
+/**
+ * Get all rooms (admin)
+ */
+export async function adminGetAllRooms(adminToken?: string): Promise<{ rooms: AdminRoom[]; count: number }> {
+  const headers: Record<string, string> = {};
+  if (adminToken) {
+    headers['x-admin-token'] = adminToken;
+  }
+  
+  const response = await fetch(`${API_URL}/api/admin/rooms`, { headers });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to get rooms');
+  }
+  
+  return response.json();
+}
+
+/**
+ * Force delete a room (admin)
+ */
+export async function adminDeleteRoom(roomId: string, adminToken?: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (adminToken) {
+    headers['x-admin-token'] = adminToken;
+  }
+  
+  const response = await fetch(`${API_URL}/api/admin/rooms/${roomId}`, {
+    method: 'DELETE',
+    headers
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to delete room');
+  }
+}
+
+/**
+ * Delete all rooms (admin)
+ */
+export async function adminDeleteAllRooms(adminToken?: string): Promise<{ deletedCount: number; failedCount: number }> {
+  const headers: Record<string, string> = {};
+  if (adminToken) {
+    headers['x-admin-token'] = adminToken;
+  }
+  
+  const response = await fetch(`${API_URL}/api/admin/rooms`, {
+    method: 'DELETE',
+    headers
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to delete rooms');
+  }
+  
+  return response.json();
+}
+
+/**
+ * Get all Hyperbeam sessions (admin)
+ */
+export async function adminGetAllSessions(): Promise<{ sessions: HyperbeamSessionInfo[]; count: number }> {
+  const response = await fetch(`${API_URL}/api/hyperbeam/sessions`);
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to get sessions');
+  }
+  
+  return response.json();
+}
+
+/**
+ * Terminate all Hyperbeam sessions (admin)
+ */
+export async function adminTerminateAllSessions(): Promise<{ terminatedCount: number; failedCount: number }> {
+  const response = await fetch(`${API_URL}/api/hyperbeam/sessions`, {
+    method: 'DELETE'
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to terminate sessions');
+  }
+  
+  return response.json();
+}
+
+/**
+ * Get server stats
+ */
+export async function getServerStats(): Promise<{
+  totalRooms: number;
+  totalParticipants: number;
+  hyperbeamAvailable: boolean;
+}> {
+  const response = await fetch(`${API_URL}/api/stats`);
+  return response.json();
+}
